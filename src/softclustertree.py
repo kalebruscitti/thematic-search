@@ -27,8 +27,8 @@ def uid_to_ints(s: str):
 class Cluster:
     """
     Base class for symbolic cluster expressions.
-    Supports &, | and ~ operators corresponding to
-    meet, join and Heyting negation respectively.
+    Supports &, | and ~ operators corresponding to meet,
+    join and Heyting negation respectively.
 
     In the Heyting algebra of inclusion strengths:
     - a & b  evaluates to elementwise min of inclusion strengths
@@ -51,11 +51,15 @@ class Cluster:
 
 class ClusterLeaf(Cluster):
     """A single cluster node identified by its uid string."""
-    def __init__(self, uid: str):
+    def __init__(self, uid: str, name: str=None):
         self.uid = uid
+        self.name = name
 
     def __repr__(self):
-        return f"ClusterLeaf({self.uid})"
+        string_rep = f"ClusterLeaf({self.uid})"
+        if self.name:
+            string_rep += f" `{self.name}`"
+        return string_rep
 
 
 class ClusterAnd(Cluster):
@@ -121,15 +125,11 @@ class SoftClusterTree:
         self.n_docs = cluster_matrices[0].shape[0]
         self.n_layers = len(cluster_matrices)
 
-        # Validate consistency between matrices and tree
         self._validate(cluster_matrices, cluster_tree)
-
-        # Sparsify and store matrices
         self.layers = [
             self._sparsify(m, sparsity_threshold) for m in cluster_matrices
         ]
-
-        # Build uid <-> (layer, cluster) mappings
+        
         self.uid_to_loc = {}   # uid -> (layer, col_index)
         self.loc_to_uid = {}   # (layer, col_index) -> uid
         for l, matrix in enumerate(cluster_matrices):
@@ -138,7 +138,6 @@ class SoftClusterTree:
                 self.uid_to_loc[uid] = (l, j)
                 self.loc_to_uid[(l, j)] = uid
 
-        # Build tree dicts with uid keys
         self.children_map = {}  # uid -> list of child uids
         self.parent_map = {}    # uid -> parent uid
         for node, children in cluster_tree.items():
@@ -148,7 +147,7 @@ class SoftClusterTree:
             for child_uid in child_uids:
                 self.parent_map[child_uid] = node_uid
 
-        # Add root node (L+1, 0) with all-255 inclusion strengths
+        # Add root node (L, 0) with all-255 inclusion strengths
         root_tup = (self.n_layers, 0)
         root_uid = topic_uid(root_tup)
         self.root_uid = root_uid
@@ -186,11 +185,15 @@ class SoftClusterTree:
     def _validate(self, cluster_matrices, cluster_tree):
         """Warn if tree nodes are inconsistent with matrix dimensions."""
         for (layer, cluster_number), children in cluster_tree.items():
-            if layer >= self.n_layers:
+            if (layer >= self.n_layers) and (cluster_number != 0):
                 warnings.warn(
                     f"Tree node ({layer}, {cluster_number}) references layer {layer} "
                     f"but only {self.n_layers} layers were provided."
                 )
+                continue
+            if layer == self.n_layers:
+                # The top layer contains only the root, so the rest of 
+                # the validation steps don't apply.
                 continue
             n_clusters = cluster_matrices[layer].shape[1]
             if cluster_number >= n_clusters:
@@ -350,10 +353,12 @@ class SoftClusterTree:
 
         return self.root_uid
 
+    #=== API/Utilities ===#
+
     def strengths(
         self,
-        indices: np.ndarray,
         expr: Union[Cluster, str],
+        indices: np.ndarray = None,
         as_float: bool = True,
     ) -> np.ndarray:
         """
@@ -375,6 +380,8 @@ class SoftClusterTree:
         np.ndarray
             Array of inclusion strengths for the given documents.
         """
+        if indices is None:
+            indices = np.arange(self.n_docs)
         if isinstance(expr, str):
             expr = ClusterLeaf(expr)
         strength_vector = self._evaluate(expr)
@@ -398,3 +405,8 @@ class SoftClusterTree:
         ClusterLeaf
         """
         return ClusterLeaf(topic_uid((layer, cluster_number)))
+
+    @property
+    def topics(self):
+        return [self.leaf(uid) for uid in self.uid_to_loc.keys()]
+        

@@ -332,6 +332,13 @@ class TopicDatabase:
     def q(self) -> RootQuery:
         """Entry point for all queries."""
         return RootQuery(self)
+        
+    @property
+    def topics(self):
+        try:
+            return [self.leaf(uid, self.topic_df.loc[uid].name) for uid in self.uid_to_loc.keys()]
+        except:
+            return self.soft_cluster_tree.topics
 
     # =================== Internal Methods ===================
 
@@ -414,18 +421,6 @@ class TopicDatabase:
         tree = self.soft_cluster_tree
         all_uids = list(tree.uid_to_loc.keys())
 
-        # Compute max depth for normalisation
-        def depth(uid):
-            d = 0
-            u = uid
-            while u in tree.parent_map:
-                u = tree.parent_map[u]
-                d += 1
-            return d
-
-        depths = {uid: depth(uid) for uid in all_uids}
-        max_depth = max(depths.values()) if depths else 1
-
         best_uid = None
         best_score = -1
 
@@ -438,11 +433,10 @@ class TopicDatabase:
             if coverage == 0:
                 continue
 
-            # Depth score: prefer deeper (more specific) topics
-            depth_score = depths[uid] / max_depth
+            # Layer score: prefer lower layer (more specific) topics
+            layer_score = ((tree.n_layers+1) - tree.uid_to_loc[uid][0])/(tree.n_layers+1)
 
-            # Multiplicative tradeoff, consistent with original optimal_join
-            score = coverage * depth_score
+            score = coverage * layer_score
 
             if score > best_score:
                 best_score = score
