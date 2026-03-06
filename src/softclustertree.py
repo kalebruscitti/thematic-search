@@ -1,26 +1,8 @@
 import numpy as np
 import scipy.sparse
 import warnings
-import base64
 from typing import Union
-
-
-# =================== UID Utilities ===================
-
-def topic_uid(tup) -> str:
-    a, b = tup
-    a = int(a)
-    b = int(b) + 1  # Because unclustered is -1 and we can't convert negative to unsigned.
-    combined = (a << 10) | b  # pack into 20 bits
-    return base64.urlsafe_b64encode(combined.to_bytes(3, "big")).rstrip(b'=').decode()
-
-
-def uid_to_ints(s: str):
-    """Returns (layer, cluster_number)"""
-    padded = s + '=' * (-len(s) % 4)
-    combined = int.from_bytes(base64.urlsafe_b64decode(padded), "big")
-    return combined >> 10, (combined & 0x3FF) - 1
-
+from utilities import *
 
 # =================== Cluster Expression Tree ===================
 
@@ -126,10 +108,15 @@ class SoftClusterTree:
         self.n_layers = len(cluster_matrices)
 
         self._validate(cluster_matrices, cluster_tree)
-        self.layers = [
-            self._sparsify(m, sparsity_threshold) for m in cluster_matrices
-        ]
-        
+        self.layers = []
+        for m in cluster_matrices:
+            if scipy.sparse.issparse(m):
+                self.layers.append(m)
+            else:
+                self.layers.append(
+                    self._sparsify(m, sparsity_threshold)
+                )
+
         self.uid_to_loc = {}   # uid -> (layer, col_index)
         self.loc_to_uid = {}   # (layer, col_index) -> uid
         for l, matrix in enumerate(cluster_matrices):
@@ -156,13 +143,6 @@ class SoftClusterTree:
         )
         self.root_vector = root_vector
         self.uid_to_loc[root_uid] = (self.n_layers, 0)
-
-        # Root's children are the top-layer clusters
-        top_layer_uids = [self.loc_to_uid[(self.n_layers - 1, j)]
-                          for j in range(cluster_matrices[-1].shape[1])]
-        self.children_map[root_uid] = top_layer_uids
-        for uid in top_layer_uids:
-            self.parent_map[uid] = root_uid
 
     # =================== Utilities ===================
 
@@ -410,3 +390,7 @@ class SoftClusterTree:
     def topics(self):
         return [self.leaf(uid) for uid in self.uid_to_loc.keys()]
         
+    @property
+    def cluster_matrices(self):
+        """Reconstruct the dense cluster matrices for saving purposes. """
+        return [matrix.todense() for matrix in self.layers]

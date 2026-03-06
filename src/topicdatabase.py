@@ -3,7 +3,17 @@ import pandas as pd
 import pynndescent
 import warnings
 from typing import Union, List, Optional
-from softclustertree import SoftClusterTree, Cluster, ClusterLeaf, topic_uid
+from softclustertree import SoftClusterTree, Cluster, ClusterLeaf
+from pathlib import Path
+from saving import (
+    save_topic_database,
+    load_topic_database
+)
+from utilities import topic_uid
+import os
+import json
+import tempfile
+import zipfile
 
 
 # =================== Query Classes ===================
@@ -288,6 +298,7 @@ class TopicDatabase:
         self,
         soft_cluster_tree: SoftClusterTree,
         embedding_vectors: np.ndarray,
+        reduced_vectors: np.ndarray = None,
         document_df: pd.DataFrame = None,
         topic_df: pd.DataFrame = None,
         embedding_model=None,
@@ -295,6 +306,7 @@ class TopicDatabase:
     ):
         self.soft_cluster_tree = soft_cluster_tree
         self.embedding_vectors = embedding_vectors
+        self.reduced_vectors = reduced_vectors
         self.embedding_model = embedding_model
         self.default_k = default_k
 
@@ -426,7 +438,7 @@ class TopicDatabase:
 
         for uid in all_uids:
             # Get soft membership strengths for all query documents
-            strengths = tree.strengths(indices, uid, as_float=True)
+            strengths = tree.strengths(uid, indices, as_float=True)
 
             # Weighted coverage: mean strength over query documents
             coverage = strengths.mean()
@@ -443,3 +455,10 @@ class TopicDatabase:
                 best_uid = uid
 
         return best_uid if best_uid is not None else tree.root_uid
+
+    def to_file(self, path: str):
+        save_topic_database(self, path)
+
+    @classmethod
+    def from_file(cls, path: str):
+        return load_topic_database(path, SoftClusterTree, cls)
