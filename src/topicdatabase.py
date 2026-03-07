@@ -5,9 +5,11 @@ import warnings
 from typing import Union, List, Optional
 from softclustertree import SoftClusterTree, Cluster, ClusterLeaf
 from pathlib import Path
-from saving import (
+from serialization import (
     save_topic_database,
-    load_topic_database
+    load_topic_database,
+    save_topic_database_lance,
+    load_topic_database_lance,
 )
 from utilities import topic_uid
 import os
@@ -112,7 +114,7 @@ class IndexQuery:
         -------
         np.ndarray of floats in [0, 1]
         """
-        return self.db.soft_cluster_tree.strengths(self._resolve_indices(), expr)
+        return self.db.soft_cluster_tree.strengths(expr, self._resolve_indices())
 
     def where(self, **kwargs) -> "IndexQuery":
         """
@@ -459,6 +461,13 @@ class TopicDatabase:
     def to_file(self, path: str):
         save_topic_database(self, path)
 
+    def to_lance(self, path: str):
+        save_topic_database_lance(self, path)
+
     @classmethod
     def from_file(cls, path: str):
         return load_topic_database(path, SoftClusterTree, cls)
+    
+    @classmethod
+    def from_lance(cls, path: str):
+        return load_topic_database_lance(path, SoftClusterTree, cls)

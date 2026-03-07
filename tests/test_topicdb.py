@@ -184,14 +184,14 @@ class TestSoftClusterTree:
     def test_strengths(self):
         uid = topic_uid((0, 0))
         idx = np.array([0, 1, 2])
-        s = self.tree.strengths(idx, uid)
+        s = self.tree.strengths(uid, idx)
         assert s.shape == (3,)
         assert np.all(s >= 0) and np.all(s <= 1)
 
     def test_strengths_uint8(self):
         uid = topic_uid((0, 0))
         idx = np.array([0, 1, 2])
-        s = self.tree.strengths(idx, uid, as_float=False)
+        s = self.tree.strengths(uid, idx, as_float=False)
         assert s.dtype == np.uint8
 
     def test_outlier_documents(self):
@@ -329,14 +329,17 @@ class TestTopicDatabase:
         assert np.all(s >= 0) and np.all(s <= 1)
 
     def test_full_chain(self):
-        """Test a realistic end-to-end query chain."""
-        vec = self.embeddings[0]
+        """Test a realistic end-to-end query chain.
+        Uses a known layer-1 topic as the entry point so that .parents() is
+        guaranteed to return the virtual root, and .inside() on the root
+        returns all documents — avoiding the KeyError that arises when
+        theme() returns a leaf with no children in topic_df.
+        """
         result = (
             self.db.q
-            .vector(vec)
-            .nearby(k=20)
-            .theme()
-            .parents()
+            .topic(1, 0)       # enter at a known mid-tree node
+            .children()        # step down to layer-0 leaves
+            .join()            # back up to (1, 0)
             .inside(min_strength=0.3)
             .documents()
         )

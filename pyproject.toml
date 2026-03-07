@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "thematic-search"
 version = "0.0.1"
+requires-python = ">=3.9"
 authors = [
     {name = "Kaleb D Ruscitti", email="kaleb.ruscitti@uwaterloo.ca"},
 ]
@@ -20,13 +21,11 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy",
+    "numpy>=1.20",
     "pandas",
     "scipy",
     "pynndescent",
 ]
 
-#[project.urls]
-#Homepage = "https://github.com/TutteInstitute/temporal-mapper"
-#Repository = "https://github.com/TutteInstitute/temporal-mapper"
-#Documentation = "https://temporal-mapper.readthedocs.io"
+[project.optional-dependencies]
+lance = ["lance", "pyarrow"]
