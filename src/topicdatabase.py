@@ -70,7 +70,7 @@ class IndexQuery:
         indices = self.db._nearby(self._vector, k)
         return IndexQuery(self.db, indices, vector=self._vector)
 
-    def topics(self, logic: str = "OR") -> "TopicQuery":
+    def topics(self, min_strength: float = 1, logic: str = "OR") -> "TopicQuery":
         """
         Return the topics containing these document indices.
         Uses weighted nearest neighbour aggregation over soft membership vectors.
@@ -81,14 +81,17 @@ class IndexQuery:
             'OR'  - return topics that contain any of the indices
             'AND' - return topics that contain all of the indices
         """
-        topics = self.db._topics(self._resolve_indices(), logic=logic)
+        topics = self.db._topics(
+            self._resolve_indices(),
+            min_strength=min_strength,
+            logic=logic
+        )
         return TopicQuery(self.db, topics)
 
     def theme(self) -> "TopicQuery":
         """
         Find the most specific topic that best covers these document indices,
         weighted by their soft membership strengths.
-        Equivalent to optimal_join in the boolean implementation.
         """
         topic_uid = self.db._theme(self._resolve_indices(), self._vector)
         return TopicQuery(self.db, [topic_uid])
@@ -160,7 +163,7 @@ class TopicQuery:
             result.update(self.db.soft_cluster_tree.children(uid))
         return TopicQuery(self.db, list(result))
 
-    def join(self) -> "TopicQuery":
+    def least_upper_bound(self) -> "TopicQuery":
         """Return the least upper bound (lowest common ancestor) of these topics."""
         uid = self.db.soft_cluster_tree.join(self.uids)
         return TopicQuery(self.db, [uid])
@@ -381,7 +384,7 @@ class TopicDatabase:
             df = df[df[col] == value]
         return df.index.to_numpy()
 
-    def _topics(self, indices: np.ndarray, logic: str = "OR") -> list:
+    def _topics(self, indices: np.ndarray, min_strength: float = 1, logic: str = "OR") -> list:
         """
         Return the topics containing a set of document indices.
         Uses the finest (lowest layer) topic for each document.
@@ -391,7 +394,7 @@ class TopicDatabase:
             doc_topics = set()
             for layer in range(self.soft_cluster_tree.n_layers):
                 col_vec = self.soft_cluster_tree.layers[layer].getrow(i)
-                nonzero_cols = col_vec.nonzero()[1]
+                nonzero_cols = (col_vec>=255*min_strength).nonzero()[1]
                 if len(nonzero_cols) > 0:
                     for col in nonzero_cols:
                         doc_topics.add(self.soft_cluster_tree.loc_to_uid[(layer, col)])

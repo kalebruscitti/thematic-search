@@ -269,7 +269,7 @@ class TestTopicDatabase:
 
     def test_topics_returns_topic_query(self):
         vec = self.embeddings[0]
-        tq = self.db.q.vector(vec).nearby().topics()
+        tq = self.db.q.vector(vec).nearby().topics(min_strength=0.5)
         assert isinstance(tq, TopicQuery)
         assert len(tq.uids) > 0
 
@@ -303,7 +303,7 @@ class TestTopicDatabase:
         assert topic_uid((0, 1)) in tq.uids
 
     def test_join_chain(self):
-        tq = TopicQuery(self.db, [topic_uid((0, 0)), topic_uid((0, 1))]).join()
+        tq = TopicQuery(self.db, [topic_uid((0, 0)), topic_uid((0, 1))]).least_upper_bound()
         assert tq.uids[0] == topic_uid((1, 0))
 
     def test_inside_chain(self):
@@ -339,7 +339,7 @@ class TestTopicDatabase:
             self.db.q
             .topic(1, 0)       # enter at a known mid-tree node
             .children()        # step down to layer-0 leaves
-            .join()            # back up to (1, 0)
+            .least_upper_bound()            # back up to (1, 0)
             .inside(min_strength=0.3)
             .documents()
         )

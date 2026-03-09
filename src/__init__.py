@@ -8,7 +8,6 @@ __all__ = [
     "IndexQuery",
     "TopicQuery",
     "RootQuery",
-    # Cluster expression tree (users build these directly with & | ~ operators, but may need the types for isinstance checks or type hints)
     "SoftClusterTree",
     "Cluster",
     "ClusterLeaf",
