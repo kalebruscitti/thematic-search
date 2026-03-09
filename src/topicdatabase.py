@@ -474,3 +474,18 @@ class TopicDatabase:
     @classmethod
     def from_lance(cls, path: str):
         return load_topic_database_lance(path, SoftClusterTree, cls)
+    
+    @classmethod
+    def from_topic_model(cls, topic_model):
+        """ Integration with Toponymy's TopicModel class. """
+        return cls(
+            SoftClusterTree(
+                topic_model.cluster_layers,
+                topic_model.cluster_tree,
+                sparsity_threshold = 0.1,
+            ),
+            embedding_vectors = topic_model.embedding_vectors,
+            reduced_vectors = topic_model.reduced_vectors,
+            document_df = topic_model.document_df,
+            topic_df = topic_model.topic_df,
+        )
