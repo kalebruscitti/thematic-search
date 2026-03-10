@@ -482,7 +482,7 @@ class TopicDatabase:
             SoftClusterTree(
                 topic_model.cluster_layers,
                 topic_model.cluster_tree,
-                sparsity_threshold = 0.1,
+                sparsity_threshold = 0.01,
             ),
             embedding_vectors = topic_model.embedding_vectors,
             reduced_vectors = topic_model.reduced_vectors,
