@@ -1,5 +1,6 @@
 from .topicdatabase import TopicDatabase, IndexQuery, TopicQuery, RootQuery
 from .softclustertree import SoftClusterTree, Cluster, ClusterLeaf, ClusterAnd, ClusterOr, ClusterNot
+import utilities as util
 
 __all__ = [
     # Primary entry point
@@ -14,4 +15,5 @@ __all__ = [
     "ClusterAnd",
     "ClusterOr",
     "ClusterNot",
+    "util",
 ]

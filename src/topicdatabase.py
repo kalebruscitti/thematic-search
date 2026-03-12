@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import pynndescent
-import warnings
 from typing import Union, List, Optional
 from softclustertree import SoftClusterTree, Cluster, ClusterLeaf
 from pathlib import Path
@@ -12,11 +11,6 @@ from serialization import (
     load_topic_database_lance,
 )
 from utilities import topic_uid
-import os
-import json
-import tempfile
-import zipfile
-
 
 # =================== Query Classes ===================
 
