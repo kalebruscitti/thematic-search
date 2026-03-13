@@ -10,14 +10,17 @@ def z_score(tag1, tag2, cooccurance, tag_matrix):
     var = E*(q-q1)*(q-q2)/(q*(q-1))
     return (cooccurance[tag1,tag2]-E)/np.sqrt(var)
 
-def compute_initial_forest(tag_matrix, omega=0.4):
+def compute_cooccurance(tag_matrix):
     n_tags = tag_matrix.shape[1]
     cooccurance = np.zeros((
         n_tags, n_tags
     ))
     for row in tag_matrix:
         cooccurance += np.outer(row, row)
+    return cooccurance
 
+def compute_initial_forest(tag_matrix, cooccurance, omega=0.4):
+    n_tags = tag_matrix.shape[1]
     zscores = np.zeros((n_tags, n_tags))
     strong_links = {}
     for tag1 in range(n_tags):
@@ -47,6 +50,36 @@ def compute_initial_forest(tag_matrix, omega=0.4):
         parents[tag1] = parent
 
     return parents
+
+def compute_entropy(i, cooccurance):
+    total = np.sum(cooccurance[i,:])
+    num = np.sum(
+        cooccurance[i,:]*np.log(cooccurance[i,:]/total)
+    )
+    return -1*num/total
+
+def glue_forest_together(parents, cooccurance):
+    roots = []
+    for tag in parents:
+        if parents[tag] is None:
+            roots.append(tag)
+    entropy = np.array(
+        compute_entropy(tag, cooccurance)
+        for tag in roots
+    )
+    sort = np.argsort(entropy)
+    for tag1 in np.array(roots)[sort][::-1]:
+        for tag2 in np.argsort(cooccurance[tag1,:])[::-1]:
+            # need to check tag2 isn't under tag1
+            par = tag2
+            while parents[par] is not None:
+                par = parents[par]
+            if par != tag1:
+                print(f'gluing {tag1} under {tag2}')
+                parents[tag1] = tag2
+                break
+    return parents
+
 
 def forest_to_children_tree(parents):
     # Assign all local roots to be under the a new global root
@@ -129,7 +162,9 @@ def build_cluster_tree_and_layers(
     return cluster_layers, cluster_tree, reverse_map
 
 def tag_hierarchy(tag_matrix, omega=0.6):
-    parents = compute_initial_forest(tag_matrix, omega=omega)
+    cooccurance = compute_cooccurance(tag_matrix)
+    parents = compute_initial_forest(tag_matrix, cooccurance, omega=omega)
+    parents = glue_forest_together(parents, cooccurance)
     children = forest_to_children_tree(parents)
     layer_map, clusters_per_layers = assemble_layers(children)
     return build_cluster_tree_and_layers(
