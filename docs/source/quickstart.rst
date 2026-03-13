@@ -2,7 +2,7 @@ Quickstart
 ==========
 
 Installation
-""""""""""""
+------------
 
 This is an alpha version, so one still must install from source::
 
@@ -10,7 +10,7 @@ This is an alpha version, so one still must install from source::
     pip install thematic-search
 
 Basic Usage
-"""""""""""
+-----------
 
 To use Thematic Search, you first need a hierarchical topic model of your dataset. This consists of the following items:
 

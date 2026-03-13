@@ -6,10 +6,11 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = 'Thematic Search'
+
 copyright = '2026, Kaleb D. Ruscitti'
 author = 'Kaleb D. Ruscitti'
 release = '0.0.1'
+project = f'Thematic Search {release}' 
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -32,7 +33,6 @@ exclude_patterns = ['**.ipynb_checkpoints']
 
 html_theme = 'sphinx_rtd_theme'
 #html_static_path = ['_static']
-
 
 # import plotly.io as pio
 # pio.renderers.default = 'sphinx_gallery'

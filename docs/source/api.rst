@@ -1,4 +1,4 @@
-Thematic Search API
+API Reference
 =====================
 
 .. currentmodule:: thematic_search
