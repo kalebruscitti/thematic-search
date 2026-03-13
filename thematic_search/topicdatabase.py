@@ -2,15 +2,15 @@ import numpy as np
 import pandas as pd
 import pynndescent
 from typing import Union, List, Optional
-from softclustertree import SoftClusterTree, Cluster, ClusterLeaf
 from pathlib import Path
-from serialization import (
+from .softclustertree import SoftClusterTree, Cluster, ClusterLeaf
+from .serialization import (
     save_topic_database,
     load_topic_database,
     save_topic_database_lance,
     load_topic_database_lance,
 )
-from utilities import topic_uid
+from .utilities import topic_uid
 
 # =================== Query Classes ===================
 

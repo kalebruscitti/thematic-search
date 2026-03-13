@@ -9,7 +9,7 @@ import scipy.sparse as sp
 import pandas as pd
 import numpy as np
 
-from utilities import uid_to_ints, topic_uid
+from .utilities import uid_to_ints, topic_uid
 
 
 _SERIAL_VERSION = "0.1"

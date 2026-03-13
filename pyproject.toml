@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "thematic-search"
 version = "0.0.1"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Kaleb D Ruscitti", email="kaleb.ruscitti@uwaterloo.ca"},
 ]
 description = ""
 readme = "README.md"
 license = {text = "BSD-3-Clause"}
-keywords = ["tda", "topic modeling", "database", "search"]
+keywords = ["information retrieval", "topic modeling", "database", "search"]
 
 classifiers = [
     "License :: OSI Approved :: BSD License",

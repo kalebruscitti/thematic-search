@@ -2,7 +2,7 @@ import numpy as np
 import scipy.sparse
 import warnings
 from typing import Union
-from utilities import *
+from .utilities import *
 
 # =================== Cluster Expression Tree ===================
 
