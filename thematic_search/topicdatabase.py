@@ -262,6 +262,27 @@ class RootQuery:
         """
         return TopicQuery(self.db, [uid])
 
+    def topic_name(self, name: str) -> TopicQuery:
+        """
+        Entry the query via a known topic name string.
+
+        Parameters
+        ----------
+        name : str
+        """
+        match_df = self.db.topic_df[self.db.topic_df['name']==name]
+        if len(match_df)==1:
+            uid = match_df.index[0]
+            return TopicQuery(self.db, [uid])
+        elif len(match_df)==0:
+            print(f"No topics with name '{name}' found.")
+            return TopicQuery(self.db, [])
+        elif len(match_df)>1:
+            print(f"Multiple topics with name '{name}' found:")
+            print(match_df)
+            print(f"Please select a topic by UID to disambiguate.")
+            return TopicQuery(self.db, [])
+
 
 # =================== Topic Database ===================
 
