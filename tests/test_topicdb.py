@@ -5,8 +5,9 @@ Uses synthetic data so no external datasets are required.
 import numpy as np
 import pandas as pd
 import pytest
-from softclustertree import SoftClusterTree, ClusterLeaf, topic_uid, uid_to_ints
-from topicdatabase import TopicDatabase, IndexQuery, TopicQuery
+
+from thematic_search.softclustertree import SoftClusterTree, ClusterLeaf, topic_uid, uid_to_ints
+from thematic_search.topicdatabase import TopicDatabase, IndexQuery, TopicQuery
 
 
 # =================== Synthetic Test Data ===================

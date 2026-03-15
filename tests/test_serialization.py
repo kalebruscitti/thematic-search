@@ -13,9 +13,7 @@ import pandas as pd
 import pytest
 import scipy.sparse
 
-from softclustertree import SoftClusterTree
-from topicdatabase import TopicDatabase
-
+from thematic_search import SoftClusterTree, TopicDatabase
 
 # =============================================================================
 # Shared fixtures
