@@ -1,4 +1,5 @@
 import base64
+from collections import defaultdict
 
 def topic_uid(tup) -> str:
     a, b = tup
@@ -29,3 +30,37 @@ def print_tree(cluster_tree, cluster_labels={}):
     ])
     root = (n_layers, 0)
     print_children(root, cluster_tree, cluster_labels=cluster_labels, depth=0)
+
+
+def compute_layers(tree):
+    layers = {}
+    def dfs(node):
+        if node in layers:
+            return layers[node]
+        children = tree.get(node, [])
+        if not children:
+            layers[node] = 0
+        else:
+            layers[node] = max(dfs(c) for c in children) + 1
+        return layers[node]
+    for node in tree:
+        dfs(node)
+    return layers
+
+def assign_cluster_tuples(tree, layers={}):
+    if layers == {}:
+        layers = compute_layers(tree)
+    by_layer = defaultdict(list)
+    for node, layer in layers.items():
+        by_layer[layer].append(node)
+    result = {}
+    for layer in sorted(by_layer):
+        for i, node in enumerate(sorted(by_layer[layer])):
+            result[node] = (layer, i)
+    return result
+
+def convert_string_tree(tree, layers={}):
+    uid_to_tup = assign_cluster_tuples(tree, layers)
+    cluster_labels = {v:k for k,v in uid_to_tup.items()}
+    cluster_tree = {uid_to_tup[n]:[uid_to_tup[x] for x in tree[n]] for n in tree}
+    return cluster_tree, cluster_labels

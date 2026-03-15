@@ -281,6 +281,8 @@ class TopicDatabase:
         The hierarchical soft clustering structure.
     embedding_vectors : np.ndarray
         The embedding vectors of the documents, shape (n_docs, n_features).
+    reduced_vectors : np.ndarray
+        The reduced vectors of the documents, shape (n_docs, n_reduced_features).
     document_df : pd.DataFrame, optional
         Document metadata. If None, a minimal DataFrame with just indices is created.
     topic_df : pd.DataFrame, optional
