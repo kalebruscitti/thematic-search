@@ -8,7 +8,7 @@ Database Classes
 
 .. autosummary::
    :toctree: generated
-   :signitures: none
+   :signitures: short
 
    TopicDatabase
    SoftClusterTree

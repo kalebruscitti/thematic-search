@@ -20,6 +20,7 @@
       ~TopicQuery.least_upper_bound
       ~TopicQuery.parents
       ~TopicQuery.unwrap
+      ~TopicQuery.where
    
    
 

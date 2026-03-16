@@ -157,6 +157,17 @@ class TopicQuery:
     def info(self) -> pd.DataFrame:
         """Return topic metadata rows for these topics."""
         return self.db._info(self.uids)
+    
+    def where(self, query:str ) -> "IndexQuery":
+        """
+        Filter topics by metadata column values.
+
+        Example
+        -------
+        query.where("layer>=1")
+        """
+        topics = self.db._topics_where(self.uids, query)
+        return TopicQuery(self.db, topics)
 
 
 # =================== Root Query ===================
@@ -266,4 +277,5 @@ class RootQuery:
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """      
+        all_topics = self.db.index.values
         return TopicQuery(self.db, self.db._topics_where(query))

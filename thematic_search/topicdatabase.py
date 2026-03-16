@@ -127,9 +127,10 @@ class TopicDatabase:
         result = df.query(query)
         return result.index.to_numpy()
     
-    def _topics_where(self, query: str) -> list:
+    def _topics_where(self, uids, query: str) -> list:
         """Filter topics by metadata column values."""
-        result = self.topic_df.query(query)
+        df = self.topic_df.loc[uids]
+        result = df.query(query)
         return result.index.to_list()
 
     def _topics(self, indices: np.ndarray, min_strength: float = 1, logic: str = "OR") -> list:

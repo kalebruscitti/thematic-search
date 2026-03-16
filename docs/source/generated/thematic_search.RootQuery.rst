@@ -14,12 +14,13 @@
    .. autosummary::
    
       ~RootQuery.__init__
+      ~RootQuery.docs_where
       ~RootQuery.from_docs
       ~RootQuery.search
       ~RootQuery.topic
       ~RootQuery.topic_name
       ~RootQuery.topic_uid
-      ~RootQuery.vector
+      ~RootQuery.topics_where
    
    
 

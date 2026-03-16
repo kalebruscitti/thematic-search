@@ -24,6 +24,7 @@ This is an alpha version, so one still must install from source::
     :caption: Examples:
 
     newsgroups
+    un-toponymy
 
 .. toctree::
     :maxdepth: 2
