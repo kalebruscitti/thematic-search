@@ -146,8 +146,8 @@ def _assert_round_trip(original: TopicDatabase, loaded: TopicDatabase):
 
 def _assert_query_works(db: TopicDatabase):
     """Smoke-test a basic query chain on a loaded database."""
-    vec = np.random.default_rng(0).standard_normal(EMB_DIM).astype(np.float32)
-    result = db.q.vector(vec).nearby(k=5).topics().info()
+    random_indices = np.random.default_rng().choice(len(db.document_df),size=5)
+    result = db.q.from_docs(random_indices).topics().info()
     assert isinstance(result, pd.DataFrame)
 
 

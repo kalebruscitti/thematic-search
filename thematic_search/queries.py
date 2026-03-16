@@ -12,26 +12,14 @@ class IndexQuery:
     Typical usage:
         topicdb.q.search("jazz music").nearby().topics().theme()
     """
-    def __init__(self, db, indices: np.ndarray, vector: np.ndarray = None):
+    def __init__(self, db, indices: np.ndarray):
         self.db = db
         self.indices = indices
-        self._vector = vector  # carry the query vector for theme()
 
     def __repr__(self):
         return f"IndexQuery({len(self.indices)} documents)"
 
     def unwrap(self) -> np.ndarray:
-        return self._resolve_indices()
-
-    def _resolve_indices(self) -> np.ndarray:
-        """
-        If indices is empty but a query vector is available,
-        automatically fetch nearby indices using default_k.
-        This allows chains like topicdb.q.search("...").theme()
-        without requiring an explicit .nearby() call.
-        """
-        if len(self.indices) == 0 and self._vector is not None:
-            return self.db._nearby(self._vector, self.db.default_k)
         return self.indices
 
     def nearby(self, k: int = None) -> "IndexQuery":
@@ -44,15 +32,10 @@ class IndexQuery:
         k : int, optional
             Number of nearest neighbours. Defaults to topicdb.default_k.
         """
-        if self._vector is None:
-            raise ValueError(
-                "nearby() requires a query vector. "
-                "Use topicdb.q.search(), topicdb.q.vector(), or topicdb.q.from_docs() "
-                "as your entry point."
-            )
-        k = k or self.db.default_k
-        indices = self.db._nearby(self._vector, k)
-        return IndexQuery(self.db, indices, vector=self._vector)
+        k = k or self.db.default_k 
+        vector = self.embeddings().mean(axis=0)
+        indices = self.db._nearby(vector, k)
+        return IndexQuery(self.db, indices)
 
     def topics(self, min_strength: float = 1, logic: str = "OR") -> "TopicQuery":
         """
@@ -66,7 +49,7 @@ class IndexQuery:
             'AND' - return topics that contain all of the indices
         """
         topics = self.db._topics(
-            self._resolve_indices(),
+            self.indices,
             min_strength=min_strength,
             logic=logic
         )
@@ -77,16 +60,16 @@ class IndexQuery:
         Find the most specific topic that best covers these document indices,
         weighted by their soft membership strengths.
         """
-        topic_uid = self.db._theme(self._resolve_indices(), self._vector)
+        topic_uid = self.db._theme(self.indices)
         return TopicQuery(self.db, [topic_uid])
 
     def documents(self) -> pd.DataFrame:
         """Return the document metadata rows for these indices."""
-        return self.db._documents(self._resolve_indices())
+        return self.db._documents(self.indices)
 
     def embeddings(self) -> np.ndarray:
         """Return the embedding vectors for these indices."""
-        return self.db._embeddings(self._resolve_indices())
+        return self.db._embeddings(self.indices)
 
     def strengths(self, expr: Union[Cluster, str]) -> np.ndarray:
         """
@@ -101,18 +84,18 @@ class IndexQuery:
         -------
         np.ndarray of floats in [0, 1]
         """
-        return self.db.soft_cluster_tree.strengths(expr, self._resolve_indices())
+        return self.db.soft_cluster_tree.strengths(expr, self.indices)
 
-    def where(self, **kwargs) -> "IndexQuery":
+    def where(self, query:str ) -> "IndexQuery":
         """
         Filter documents by metadata column values.
 
         Example
         -------
-        query.where(author="Alice")
+        query.where("author=='Alice'")
         """
-        indices = self.db._where(self._resolve_indices(), kwargs)
-        return IndexQuery(self.db, indices, vector=self._vector)
+        indices = self.db._docs_where(self.indices, query)
+        return IndexQuery(self.db, indices)
 
 
 class TopicQuery:
@@ -203,19 +186,9 @@ class RootQuery:
                 "parameter when constructing TopicDatabase."
             )
         vec = self.db.embedding_model.encode(text)
-        return IndexQuery(self.db, np.array([]), vector=vec).nearby(k=k)
-
-    def vector(self, vec: np.ndarray) -> IndexQuery:
-        """
-        Use a raw embedding vector as the query entry point.
-
-        Parameters
-        ----------
-        vec : np.ndarray
-            The query embedding vector.
-        """
-        return IndexQuery(self.db, np.array([]), vector=vec)
-
+        indices = self.db._nearby(vec, k=k)
+        return IndexQuery(self.db, indices)
+    
     def from_docs(self, indices: Union[List[int], np.ndarray]) -> IndexQuery:
         """
         Use a set of document indices as the query entry point.
@@ -227,8 +200,7 @@ class RootQuery:
             Document indices to use as the query.
         """
         indices = np.array(indices)
-        vec = self.db._embeddings(indices).mean(axis=0)
-        return IndexQuery(self.db, indices, vector=vec)
+        return IndexQuery(self.db, indices)
 
     def topic(self, layer: int, cluster_number: int) -> TopicQuery:
         """
@@ -273,3 +245,25 @@ class RootQuery:
             print(f"Please select a topic by UID to disambiguate.")
             return TopicQuery(self.db, [])
 
+    def docs_where(self, query: str) -> IndexQuery:
+        """
+        Request the set of documents whose metadata matches a Pandas query.
+
+        Parameters
+        ----------
+        query : str
+            A query string following `pandas.DataFrame.query` syntax.
+        """
+        all_indices = self.db.document_df.index.to_numpy()
+        return IndexQuery(self.db, self.db._docs_where(all_indices, query))
+    
+    def topics_where(self, query: str) -> TopicQuery:
+        """
+        Request the set of topics whose metadata matches a Pandas query.
+
+        Parameters
+        ----------
+        query : str
+            A query string following `pandas.DataFrame.query` syntax.
+        """      
+        return TopicQuery(self.db, self.db._topics_where(query))

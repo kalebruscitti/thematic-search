@@ -121,12 +121,16 @@ class TopicDatabase:
         """Return topic metadata rows for a set of uids."""
         return self.topic_df.loc[self.topic_df.index.isin(uids)]
 
-    def _where(self, indices: np.ndarray, selectors: dict) -> np.ndarray:
+    def _docs_where(self, indices: np.ndarray, query: str) -> np.ndarray:
         """Filter document indices by metadata column values."""
         df = self.document_df.iloc[indices]
-        for col, value in selectors.items():
-            df = df[df[col] == value]
-        return df.index.to_numpy()
+        result = df.query(query)
+        return result.index.to_numpy()
+    
+    def _topics_where(self, query: str) -> list:
+        """Filter topics by metadata column values."""
+        result = self.topic_df.query(query)
+        return result.index.to_list()
 
     def _topics(self, indices: np.ndarray, min_strength: float = 1, logic: str = "OR") -> list:
         """

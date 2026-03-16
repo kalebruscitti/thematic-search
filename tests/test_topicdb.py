@@ -229,62 +229,41 @@ class TestTopicDatabase:
         assert self.db.default_k == 10
         assert self.db.embedding_model is None
 
-    def test_vector_entry_point(self):
-        vec = self.embeddings[0]
-        q = self.db.q.vector(vec)
-        assert isinstance(q, IndexQuery)
-        assert q._vector is not None
-
-    def test_from_docs_entry_point(self):
-        q = self.db.q.from_docs([0, 1, 2])
-        assert isinstance(q, IndexQuery)
-        assert q._vector is not None
-        # Vector should be mean of embeddings 0,1,2
-        expected_vec = self.embeddings[[0, 1, 2]].mean(axis=0)
-        np.testing.assert_array_almost_equal(q._vector, expected_vec)
-
     def test_search_without_model_raises(self):
         with pytest.raises(ValueError, match="embedding model"):
             self.db.q.search("test query")
 
     def test_nearby_returns_indices(self):
-        vec = self.embeddings[0]
-        idx = self.db.q.vector(vec).nearby(k=5).unwrap()
+        idx = self.db.q.from_docs([0]).nearby(k=5).unwrap()
         assert len(idx) == 5
         assert isinstance(idx, np.ndarray)
 
     def test_nearby_default_k(self):
-        vec = self.embeddings[0]
-        idx = self.db.q.vector(vec).nearby().unwrap()
+        idx = self.db.q.from_docs([0]).nearby().unwrap()
         assert len(idx) == self.db.default_k
 
     def test_documents_terminal(self):
-        vec = self.embeddings[0]
-        df = self.db.q.vector(vec).nearby().documents()
+        df = self.db.q.from_docs([0]).nearby().documents()
         assert isinstance(df, pd.DataFrame)
         assert len(df) == self.db.default_k
         assert "text" in df.columns
 
     def test_embeddings_terminal(self):
-        vec = self.embeddings[0]
-        embs = self.db.q.vector(vec).nearby().embeddings()
+        embs = self.db.q.from_docs([0]).nearby().embeddings()
         assert embs.shape == (self.db.default_k, self.embeddings.shape[1])
 
     def test_topics_returns_topic_query(self):
-        vec = self.embeddings[0]
-        tq = self.db.q.vector(vec).nearby().topics(min_strength=0.5)
+        tq = self.db.q.from_docs([0]).nearby().topics(min_strength=0.5)
         assert isinstance(tq, TopicQuery)
         assert len(tq.uids) > 0
 
     def test_theme_returns_topic_query(self):
-        vec = self.embeddings[0]
-        tq = self.db.q.vector(vec).nearby().theme()
+        tq = self.db.q.from_docs([0]).nearby().theme()
         assert isinstance(tq, TopicQuery)
         assert len(tq.uids) == 1
 
     def test_theme_uid_is_valid(self):
-        vec = self.embeddings[0]
-        uid = self.db.q.vector(vec).nearby().theme().uids[0]
+        uid = self.db.q.from_docs([0]).nearby().theme().uids[0]
         assert uid in self.sct.uid_to_loc
 
     def test_info_terminal(self):
@@ -315,17 +294,14 @@ class TestTopicDatabase:
         assert len(iq.indices) > 0
 
     def test_where_filter(self):
-        vec = self.embeddings[0]
         # label is in {0,1,2,3}, filter for label==0
-        df_all = self.db.q.vector(vec).nearby(k=50).documents()
-        iq_filtered = self.db.q.vector(vec).nearby(k=50).where(label=0)
+        iq_filtered = self.db.q.from_docs([0]).nearby(k=50).where("label==0")
         df_filtered = iq_filtered.documents()
         assert len(df_filtered) <= 50
         assert (df_filtered["label"] == 0).all()
 
     def test_strengths_in_chain(self):
-        vec = self.embeddings[0]
-        iq = self.db.q.vector(vec).nearby()
+        iq = self.db.q.from_docs([0]).nearby()
         leaf = self.sct.leaf(0, 0)
         s = iq.strengths(leaf)
         assert len(s) == self.db.default_k
