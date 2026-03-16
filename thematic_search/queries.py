@@ -111,7 +111,7 @@ class TopicQuery:
         self.uids = uids
 
     def __repr__(self):
-        return f"TopicQuery({self.uids})"
+        return f"TopicQuery({len(self.uids)} topics)"
 
     def unwrap(self) -> list:
         return self.uids
