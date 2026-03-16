@@ -17,9 +17,11 @@ This is an alpha version, so one still must install from source::
     quickstart
     toponymy_integration
 
-    :caption: Examples
+.. toctree::
+    :maxdepth: 2
+    :caption: Examples:
 
-    thematic-search-20ng
+    newsgroups
 
 .. toctree::
     :maxdepth: 2

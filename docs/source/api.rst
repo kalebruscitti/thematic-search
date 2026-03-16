@@ -8,7 +8,7 @@ Database Classes
 
 .. autosummary::
    :toctree: generated
-   :nosignatures:
+   :signitures: none
 
    TopicDatabase
    SoftClusterTree
@@ -19,7 +19,7 @@ Query Classes
 
 .. autosummary::
    :toctree: generated
-   :nosignatures:
+   :signitures: short
 
     RootQuery
     TopicQuery
@@ -29,7 +29,6 @@ Query Classes
 Utility Functions
 -----------------
 
-.. automodule:: thematic_search.util
+.. automodule:: thematic_search.utilities
     :members:
-    :undoc-members:
     :show-inheritance:

@@ -17,6 +17,7 @@
       ~RootQuery.from_docs
       ~RootQuery.search
       ~RootQuery.topic
+      ~RootQuery.topic_name
       ~RootQuery.topic_uid
       ~RootQuery.vector
    

@@ -479,22 +479,26 @@ class TopicDatabase:
         return best_uid if best_uid is not None else tree.root_uid
 
     def to_file(self, path: str):
+        """ Save a TopicDatbase to a `tm.zip` file. """
         save_topic_database(self, path)
 
     def to_lance(self, path: str):
+        """ Save a TopicDatabase to a LanceDB folder. """
         save_topic_database_lance(self, path)
 
     @classmethod
     def from_file(cls, path: str):
+        """ Load a TopicDatabase from a `tm.zip` file. """
         return load_topic_database(path, SoftClusterTree, cls)
     
     @classmethod
     def from_lance(cls, path: str):
+        """ Load a TopicDatabase from a LanceDB folder. """
         return load_topic_database_lance(path, SoftClusterTree, cls)
     
     @classmethod
     def from_topic_model(cls, topic_model):
-        """ Integration with Toponymy's TopicModel class. """
+        """ Create a TopicDatabase from a `toponymy.serialization.TopicModel` class. """
         return cls(
             SoftClusterTree(
                 topic_model.cluster_layers,
