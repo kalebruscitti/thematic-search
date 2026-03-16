@@ -6,8 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from thematic_search.softclustertree import SoftClusterTree, ClusterLeaf, topic_uid, uid_to_ints
-from thematic_search.topicdatabase import TopicDatabase, IndexQuery, TopicQuery
+from thematic_search.softclustertree import SoftClusterTree, ClusterLeaf
+from thematic_search.topicdatabase import TopicDatabase
+from thematic_search.queries import  IndexQuery, TopicQuery
+from thematic_search.utilities import topic_uid, uid_to_ints
 
 
 # =================== Synthetic Test Data ===================
