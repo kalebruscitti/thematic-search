@@ -196,7 +196,7 @@ class RootQuery:
     def __init__(self, db):
         self.db = db
 
-    def search(self, text: str) -> IndexQuery:
+    def search(self, text: str, k: int=15) -> IndexQuery:
         """
         Embed a text string and return an IndexQuery carrying the query vector.
         Requires a sentence transformer model to be provided at construction time.
@@ -213,7 +213,7 @@ class RootQuery:
                 "parameter when constructing TopicDatabase."
             )
         vec = self.db.embedding_model.encode(text)
-        return IndexQuery(self.db, np.array([]), vector=vec)
+        return IndexQuery(self.db, np.array([]), vector=vec).nearby(k=k)
 
     def vector(self, vec: np.ndarray) -> IndexQuery:
         """

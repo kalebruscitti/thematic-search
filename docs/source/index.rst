@@ -15,6 +15,8 @@ This is an alpha version, so one still must install from source::
     :caption: Usage:
 
     quickstart
+    queries
+    serialization
     toponymy_integration
 
 .. toctree::
