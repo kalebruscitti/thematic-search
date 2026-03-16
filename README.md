@@ -2,6 +2,7 @@
 
 Thematic search is a package for *thematic search* on documents that have a hierarchical topic model. 
 
+[More Documentation on ReadTheDocs!](https://thematic-search.readthedocs.io/en/latest/)
 
 ## Installation
 This is a super alpha version, so you must install from source:
