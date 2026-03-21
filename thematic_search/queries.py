@@ -132,8 +132,7 @@ class TopicQuery:
 
     def least_upper_bound(self) -> "TopicQuery":
         """Return the least upper bound (lowest common ancestor) of these topics."""
-        uid = self.db.soft_cluster_tree.join(self.uids)
-        return TopicQuery(self.db, [uid])
+        return TopicQuery(self.db, self.db.soft_cluster_tree.join(self.uids))
 
     def inside(
         self,

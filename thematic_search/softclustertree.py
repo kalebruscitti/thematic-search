@@ -84,6 +84,12 @@ class SoftClusterTree:
     A hierarchical soft clustering structure storing inclusion strengths
     as uint8 sparse matrices (0-255, divide by 255 to recover floats).
 
+    The cluster hierarchy may be a DAG (directed acyclic graph), meaning
+    a node may have multiple parents. Edges must respect the layer ordering:
+    if (s, k) is a parent of (l, i) then s > l. The inclusion strength
+    consistency assumption must hold for every edge: c^s_k(r) >= c^l_i(r)
+    for all records r.
+
     Parameters
     ----------
     cluster_matrices : list of np.ndarray
@@ -93,6 +99,8 @@ class SoftClusterTree:
     cluster_tree : dict
         A dict mapping (layer, cluster_number) tuples to lists of children
         tuples, e.g. {(2, 0): [(1, 0), (1, 1)], (2, 1): [(1, 2)], ...}
+        The unique root node is the key with no parents, i.e. the node
+        that does not appear in any value list.
     sparsity_threshold : float, optional (default=0.0)
         Inclusion strengths below this value are set to zero before
         sparsification. Useful for cleaning up near-zero soft memberships.
@@ -126,23 +134,25 @@ class SoftClusterTree:
                 self.loc_to_uid[(l, j)] = uid
 
         self.children_map = {}  # uid -> list of child uids
-        self.parent_map = {}    # uid -> parent uid
+        self.parent_map = {}    # uid -> list of parent uids  (DAG: may be multiple)
         for node, children in cluster_tree.items():
             node_uid = topic_uid(node)
             child_uids = [topic_uid(c) for c in children]
             self.children_map[node_uid] = child_uids
             for child_uid in child_uids:
-                self.parent_map[child_uid] = node_uid
+                self.parent_map.setdefault(child_uid, [])
+                self.parent_map[child_uid].append(node_uid)
 
-        # Add root node (L, 0) with all-255 inclusion strengths
-        root_tup = (self.n_layers, 0)
-        root_uid = topic_uid(root_tup)
-        self.root_uid = root_uid
-        root_vector = scipy.sparse.csr_matrix(
-            np.full((self.n_docs, 1), 255, dtype=np.uint8)
-        )
-        self.root_vector = root_vector
-        self.uid_to_loc[root_uid] = (self.n_layers, 0)
+        # Identify the root: the unique node in cluster_tree with no parents
+        all_children = {topic_uid(c) for children in cluster_tree.values() for c in children}
+        roots = [topic_uid(n) for n in cluster_tree if topic_uid(n) not in all_children]
+        if len(roots) != 1:
+            raise ValueError(
+                f"cluster_tree must have exactly one root (a node with no parents), "
+                f"but found {len(roots)}: {roots}"
+            )
+        self.root_uid = roots[0]
+        self.uid_to_loc[self.root_uid] = (self.n_layers, 0)
 
     # =================== Utilities ===================
 
@@ -200,10 +210,12 @@ class SoftClusterTree:
         Return the dense uint8 inclusion strength vector (shape: n_docs,)
         for a given cluster uid.
         """
-        if uid == self.root_uid:
-            return self.root_vector.toarray().flatten()
         layer, col = self.uid_to_loc[uid]
-        return np.array(self.layers[layer].getcol(col).toarray()).flatten()
+        if layer == self.n_layers:
+            # root node.
+            return np.full((self.n_docs,1), 255, dtype=np.uint8)
+        else:
+            return np.array(self.layers[layer].getcol(col).toarray()).flatten()
 
     def _evaluate(self, expr: Cluster) -> np.ndarray:
         """
@@ -266,7 +278,7 @@ class SoftClusterTree:
 
     def parents(self, uid: str) -> list:
         """
-        Return the parent uid of a cluster, or an empty list if it is the root.
+        Return the parent uids of a cluster, or an empty list if it is the root.
 
         Parameters
         ----------
@@ -276,11 +288,9 @@ class SoftClusterTree:
         Returns
         -------
         list of str
-            A list containing the parent uid, or empty if uid is the root.
+            A list of parent uids, or empty if uid is the root.
         """
-        if uid == self.root_uid:
-            return []
-        return [self.parent_map[uid]]
+        return self.parent_map.get(uid, [])
 
     def children(self, uid: str) -> list:
         """
@@ -298,10 +308,11 @@ class SoftClusterTree:
         """
         return self.children_map.get(uid, [])
 
-    def join(self, uids: list) -> str:
+    def join(self, uids: list) -> list:
         """
-        Return the uid of the least upper bound (LUB) of a set of clusters
-        in the tree, i.e. their lowest common ancestor.
+        Return the uids of the least upper bounds (LUBs) of a set of clusters,
+        i.e. their lowest common ancestors in the DAG. There may be multiple
+        incomparable LUBs at the same minimum layer.
 
         Parameters
         ----------
@@ -310,28 +321,31 @@ class SoftClusterTree:
 
         Returns
         -------
-        str
-            The uid of the LUB cluster.
+        list of str
+            The uids of the LUB clusters.
         """
         if len(uids) == 1:
-            return uids[0]
+            return uids
 
         def ancestors(uid):
-            path = [uid]
-            while uid in self.parent_map:
-                uid = self.parent_map[uid]
-                path.append(uid)
-            return path
+            visited = set()
+            queue = [uid]
+            while queue:
+                current = queue.pop()
+                if current in visited:
+                    continue
+                visited.add(current)
+                queue.extend(self.parent_map.get(current, []))
+            return visited
 
-        # Find ancestors of each uid, then find the first common ancestor
-        ancestor_lists = [ancestors(uid) for uid in uids]
-        # Walk up the first list and check if each ancestor is in all others
-        anchor_sets = [set(a) for a in ancestor_lists[1:]]
-        for candidate in ancestor_lists[0]:
-            if all(candidate in s for s in anchor_sets):
-                return candidate
+        ancestor_sets = [ancestors(uid) for uid in uids]
+        common = ancestor_sets[0].intersection(*ancestor_sets[1:])
 
-        return self.root_uid
+        if not common:
+            return [self.root_uid]
+
+        min_layer = min(self.uid_to_loc[u][0] for u in common)
+        return [u for u in common if self.uid_to_loc[u][0] == min_layer]
 
     #=== API/Utilities ===#
 

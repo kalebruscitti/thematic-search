@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pandas as pd
 import pynndescent
@@ -36,6 +37,11 @@ class TopicDatabase:
     topic_df : pd.DataFrame, optional
         Topic metadata. Must have a 'uid' column as primary key if provided.
         If None, a minimal DataFrame with uid, layer and cluster_number is created.
+    cluster_labels : dict, optional
+        A dict mapping (layer, cluster_number) tuples to original node labels,
+        as returned by convert_tree(). If provided, topic_df.index is expected
+        to use those original labels and will be re-indexed to UIDs internally.
+        The mapping is stored as self.cluster_labels for display purposes.
     embedding_model : optional
         A SentenceTransformer model for use with topicdb.q.search().
         If None, search() will raise a helpful error.
@@ -50,6 +56,7 @@ class TopicDatabase:
         reduced_vectors: np.ndarray = None,
         document_df: pd.DataFrame = None,
         topic_df: pd.DataFrame = None,
+        cluster_labels: dict = None,
         embedding_model=None,
         default_k: int = 15,
     ):
@@ -58,6 +65,7 @@ class TopicDatabase:
         self.reduced_vectors = reduced_vectors
         self.embedding_model = embedding_model
         self.default_k = default_k
+        self.cluster_labels = cluster_labels
 
         # Build nearest neighbour index
         self.nn_index = pynndescent.NNDescent(embedding_vectors)
@@ -74,9 +82,19 @@ class TopicDatabase:
         if topic_df is None:
             self.topic_df = self._minimal_topic_df()
         else:
-            if "uid" not in topic_df.columns:
-                raise ValueError("topic_df must have a 'uid' column as primary key.")
-            self.topic_df = topic_df.set_index("uid")
+            if cluster_labels is not None:
+                # Re-index from original node labels to UIDs
+                label_to_uid = {v: topic_uid(k) for k, v in cluster_labels.items()}
+                unknown = set(topic_df.index) - set(label_to_uid.keys())
+                if unknown:
+                    warnings.warn(
+                        f"topic_df contains {len(unknown)} row(s) with labels not "
+                        f"found in cluster_labels; they will be dropped: {unknown}"
+                    )
+                    topic_df = topic_df.loc[topic_df.index.isin(label_to_uid)]
+                topic_df = topic_df.copy()
+                topic_df.index = topic_df.index.map(label_to_uid)
+            self.topic_df = topic_df
 
     def _minimal_topic_df(self) -> pd.DataFrame:
         """Build a minimal topic metadata DataFrame from the SoftClusterTree."""
@@ -230,7 +248,7 @@ class TopicDatabase:
     
     @classmethod
     def from_topic_model(cls, topic_model):
-        """ Create a TopicDatabase from a `toponymy.serialization.TopicModel` class. """
+        """ Integration with Toponymy's TopicModel class. """
         return cls(
             SoftClusterTree(
                 topic_model.cluster_layers,

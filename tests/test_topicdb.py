@@ -40,6 +40,7 @@ def make_test_data(n_docs=100, n_features=32, seed=42):
 
     # Tree: children of (1,0) are (0,0),(0,1); children of (1,1) are (0,2),(0,3)
     cluster_tree = {
+        (2, 0): [(1, 0), (1, 1)],
         (1, 0): [(0, 0), (0, 1)],
         (1, 1): [(0, 2), (0, 3)],
     }
@@ -63,7 +64,7 @@ def make_test_data(n_docs=100, n_features=32, seed=42):
                 "cluster_number": j,
                 "name": f"Topic L{layer}C{j}",
             })
-    topic_df = pd.DataFrame(rows)
+    topic_df = pd.DataFrame(rows).set_index('uid')
 
     return cluster_matrices, cluster_tree, embeddings, document_df, topic_df
 
@@ -171,18 +172,18 @@ class TestSoftClusterTree:
         uid0 = topic_uid((0, 0))
         uid1 = topic_uid((0, 1))
         lub = self.tree.join([uid0, uid1])
-        assert lub == topic_uid((1, 0))
+        assert lub == [topic_uid((1, 0))]
 
     def test_join_single(self):
         uid = topic_uid((0, 0))
-        assert self.tree.join([uid]) == uid
+        assert self.tree.join([uid]) == [uid]
 
     def test_join_cousins(self):
         """LUB of nodes in different branches should be the root."""
         uid0 = topic_uid((0, 0))
         uid2 = topic_uid((0, 2))
         lub = self.tree.join([uid0, uid2])
-        assert lub == self.tree.root_uid
+        assert lub == [self.tree.root_uid]
 
     def test_strengths(self):
         uid = topic_uid((0, 0))
@@ -332,16 +333,6 @@ class TestTopicDatabase:
         )
         assert "layer" in db.topic_df.columns
         assert "cluster_number" in db.topic_df.columns
-
-    def test_topic_df_missing_uid_raises(self):
-        bad_df = pd.DataFrame({"layer": [0], "cluster_number": [0]})
-        with pytest.raises(ValueError, match="uid"):
-            TopicDatabase(
-                soft_cluster_tree=self.sct,
-                embedding_vectors=self.embeddings,
-                topic_df=bad_df,
-            )
-
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

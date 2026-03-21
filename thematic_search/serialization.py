@@ -111,6 +111,7 @@ def load_topic_database(path, SoftClusterTree, TopicDatabase):
         # --- DataFrames ---
         document_df = pd.read_parquet(root / "document_df.parquet")
         topic_df = pd.read_parquet(root / "topic_df.parquet")
+        topic_df = topic_df.set_index("uid")
 
         # --- Vectors ---
         embedding_vectors = np.load(root / "embedding_vectors.npy")
@@ -298,8 +299,8 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
 
     # --- topics ---
     topic_dict = lance.dataset(str(path / "topics.lance")).to_table().to_pydict()
-    topic_df = pd.DataFrame(topic_dict)
-
+    topic_df = pd.DataFrame(topic_dict).set_index('uid')
+    
     # --- clusters: reconstruct one csr_matrix per layer ---
     coo_dict = lance.dataset(str(path / "clusters.lance")).to_table().to_pydict()
     layers_arr   = np.array(coo_dict["layer"],   dtype=np.int16)
