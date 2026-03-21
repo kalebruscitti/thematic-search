@@ -10,7 +10,7 @@
 copyright = '2026, Kaleb D. Ruscitti'
 author = 'Kaleb D. Ruscitti'
 release = '0.0.1'
-project = f'Thematic Search {release}' 
+project = f'Thematic Search' 
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration

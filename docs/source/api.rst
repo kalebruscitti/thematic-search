@@ -8,7 +8,7 @@ Database Classes
 
 .. autosummary::
    :toctree: generated
-   :signitures: short
+   :signatures: short
 
    TopicDatabase
    SoftClusterTree
@@ -19,12 +19,11 @@ Query Classes
 
 .. autosummary::
    :toctree: generated
-   :signitures: short
+   :signatures: short
 
-    RootQuery
-    TopicQuery
-    IndexQuery
-
+   RootQuery
+   TopicQuery
+   IndexQuery
 
 Utility Functions
 -----------------

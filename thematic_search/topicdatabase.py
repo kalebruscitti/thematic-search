@@ -258,5 +258,5 @@ class TopicDatabase:
             embedding_vectors = topic_model.embedding_vectors,
             reduced_vectors = topic_model.reduced_vectors,
             document_df = topic_model.document_df,
-            topic_df = topic_model.topic_df,
+            topic_df = topic_model.topic_df.set_index('uid'),
         )
