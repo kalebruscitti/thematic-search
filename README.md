@@ -1,70 +1,93 @@
 # Thematic Search
 
-Thematic search is a package for *thematic search* on documents that have a hierarchical topic model. 
+Thematic Search is a Python package for *thematic search* on document collections with a hierarchical topic model. It lets you find the most specific topic covering a set of documents, navigate a topic hierarchy, and chain semantic and thematic queries together.
 
-[More Documentation on ReadTheDocs!](https://thematic-search.readthedocs.io/en/latest/)
+Full documentation is available on [ReadTheDocs](https://thematic-search.readthedocs.io/en/latest/).
 
 ## Installation
-This is a super alpha version, so you must install from source:
 
-    git clone git@github.com:kalebruscitti/thematic-search.git
-    pip install thematic-search
+This is an alpha release; install from source:
 
-
+```bash
+git clone git@github.com:kalebruscitti/thematic-search.git
+pip install thematic-search
+```
 
 ## Basic Usage
-To use Thematic Search, you first need a hierarchical topic model of your dataset. This consists of the following items:
 
-- An array `embedding_vectors` of embedding vectors for your documents
-- A hierarchical clustering of these documents, encoded as the following:
-    1. A set of clusters `(l, i)` for each layer `l` of your hierarchy.
-    2. A list of inclusion strength matrices `cluster_layers` where `cluster_layers[l][j,i]` is the inclusion strength of document `j` in cluster `(l,i)` (in [0,1]). 
-    3. A dictionary `cluster_tree` whose keys are the clusters `(l,i)` and such that `cluster_tree[(l,i)]` is a list containing the children of `(l,i)` in the tree.
-- A dataframe `topic_metadata` with a row for each cluster `(l,i)`.
-- (Optional) A dataframe `document_metadata` containing document metadata for each embedding vector.
-- (Optional) An array `reduced_vectors` of low-dimensional vectors for each document.
+### What you need
 
-Given these objects, one can intitialize a TopicDatabase:
+To initialize a `TopicDatabase` you need:
 
-    topicdb = TopicDatabase(
-        SoftClusterTree(
-            cluster_layers,
-            cluster_tree,
-        ),
-        embedding_vectors = embedding_vectors,
-        reduced_vectors = reduced_vectors,
-        document_df = document_metadata,
-        topic_df = topic_metadata,
-    )
+- `embedding_vectors`: an `(n_docs, d)` float array of document embeddings
+- `cluster_tree`: a dictionary `{node: [children]}` representing your topic hierarchy, where nodes can be any hashable labels (strings, ints, etc.)
+- `cluster_layers`: a list of `(n_docs, n_clusters)` float arrays in `[0,1]`, one per layer, where `cluster_layers[l][j, i]` is the inclusion strength of document `j` in the `i`-th cluster at layer `l`
 
-Here are some example queries:
+Optionally:
 
-    ## Yields the documents that are nearest neighbours of the embedding of the string;
-    print(topicdb.q.search("Advancements in space technology").nearby().documents())
+- `topic_metadata`: a `DataFrame` with a row for each node in `cluster_tree`, indexed by the same node labels
+- `document_metadata`: a `DataFrame` with a row for each document
+- `reduced_vectors`: an `(n_docs, 2)` array of low-dimensional vectors for visualisation
 
-    ## Yields the metadata for the theme of the nearest neighbours of the embedding of the string:
-    topicdb.q.search("Advancements in space technology").theme().info()
+### Converting your cluster tree
 
-The full set of possible queries and queries chains is given by composition of arrows in this category:
+The `convert_tree` utility converts your tree from arbitrary node labels into the internal format required by `SoftClusterTree`, and returns a `cluster_labels` mapping that allows `TopicDatabase` to automatically align your `topic_metadata`:
+
+```python
+from thematic_search.utilities import convert_tree
+
+cluster_tree, cluster_labels = convert_tree(my_tree)
+```
+
+Layers are assigned automatically (leaves at layer 0, each internal node one layer above its deepest child), or you can supply a custom `layers` dictionary.
+
+### Initializing a TopicDatabase
+
+```python
+from thematic_search import TopicDatabase, SoftClusterTree
+
+topicdb = TopicDatabase(
+    SoftClusterTree(cluster_layers, cluster_tree),
+    embedding_vectors=embedding_vectors,
+    reduced_vectors=reduced_vectors,        # optional
+    document_df=document_metadata,          # optional
+    topic_df=topic_metadata,                # indexed by your node labels
+    cluster_labels=cluster_labels,          # from convert_tree
+)
+```
+
+If you want to use `topicdb.q.search()`, you will also need to provide an `embedding_model` — a `SentenceTransformer` model matching the one used to produce `embedding_vectors` — either at construction time or by setting `topicdb.embedding_model` before calling `search()`.
+
+### Querying
+
+Queries are accessed via `topicdb.q` and are chainable. The full set of composable queries is given by the arrows in the schema diagram:
 
 ![A commutative diagram explaining the queries in the database.](instance-category.png)
 
+Some examples:
+
+```python
+# Documents nearest to a query string in embedding space
+topicdb.q.search("Advancements in space technology").documents()
+
+# Most specific topic covering those nearest neighbours
+topicdb.q.search("Advancements in space technology").theme().info()
+
+# Documents inside a named topic with at least 75% inclusion strength
+topicdb.q.topic_name("science").inside(min_strength=0.75).documents()
+
+# Chain queries: theme of documents inside the parent of a known topic
+topicdb.q.topic_name("physics").parents().inside().theme().info()
+```
+
 ## Toponymy Integration
 
-Thematic Search is designed to work out-of-the-box with a topic model generated by [Toponymy](https://github.com/TutteInstitute/toponymy). Suppose `toponymy` is a fitted toponymy object - then, using toponymy's serialization class, we can turn it into a TopicDatabase:
+Thematic Search is designed to work out-of-the-box with topic models generated by [Toponymy](https://github.com/TutteInstitute/toponymy). Given a fitted Toponymy object, the `from_topic_model` class method handles the conversion directly:
 
-    from toponymy.serialization import TopicModel
+```python
+from toponymy.serialization import TopicModel
+from thematic_search import TopicDatabase
 
-    topic_model = TopicModel.from_toponymy(toponymy, document_df=my_document_metadata)
-
-    topicdb = TopicDatabase(
-        SoftClusterTree(
-            topic_model.cluster_layers,
-            topic_model.cluster_tree,
-            sparsity_threshold = 0.1,
-        ),
-        embedding_vectors = topic_model.embedding_vectors,
-        reduced_vectors = topic_model.reduced_vectors,
-        document_df = topic_model.document_df,
-        topic_df = topic_model.topic_df,
-    )
+topic_model = TopicModel.from_toponymy(toponymy, document_df=my_document_metadata)
+topicdb = TopicDatabase.from_topic_model(topic_model)
+```
