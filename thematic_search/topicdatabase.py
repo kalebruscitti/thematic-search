@@ -227,6 +227,11 @@ class TopicDatabase:
                 best_uid = uid
 
         return best_uid if best_uid is not None else tree.root_uid
+    
+    @property 
+    def tree(self):
+        """ Return the database tree as a dictionary. (self.soft_cluster_tree.children_map) """
+        return self.soft_cluster_tree.children_map
 
     def to_file(self, path: str):
         """ Save a TopicDatbase to a `tm.zip` file. """

@@ -1,5 +1,5 @@
 from .topicdatabase import TopicDatabase
-from .softclustertree import SoftClusterTree, Cluster, ClusterLeaf, ClusterAnd, ClusterOr, ClusterNot
+from .softclustertree import SoftClusterTree, IndexExpr, Cluster, IndexAnd, IndexOr, IndexNot
 from .queries import  IndexQuery, TopicQuery, RootQuery
 import thematic_search.utilities as utils
 __all__ = [
@@ -10,10 +10,10 @@ __all__ = [
     "TopicQuery",
     "RootQuery",
     "SoftClusterTree",
+    "IndexExpr",
     "Cluster",
-    "ClusterLeaf",
-    "ClusterAnd",
-    "ClusterOr",
-    "ClusterNot",
+    "IndexAnd",
+    "IndexOr",
+    "IndexNot",
     "utils",
 ]

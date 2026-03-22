@@ -4,9 +4,9 @@ import warnings
 from typing import Union
 from .utilities import *
 
-# =================== Cluster Expression Tree ===================
+# =================== Index Expressions ===================
 
-class Cluster:
+class IndexExpr:
     """
     Base class for symbolic cluster expressions.
     Supports &, | and ~ operators corresponding to meet,
@@ -19,19 +19,19 @@ class Cluster:
     - ~~a    evaluates to 1 where strength > 0, else 0   (double negation)
     """
     def __and__(self, other):
-        return ClusterAnd(self, other)
+        return IndexAnd(self, other)
 
     def __or__(self, other):
-        return ClusterOr(self, other)
+        return IndexOr(self, other)
 
     def __invert__(self):
-        return ClusterNot(self)
+        return IndexNot(self)
 
     def __repr__(self):
         raise NotImplementedError
 
 
-class ClusterLeaf(Cluster):
+class Cluster(IndexExpr):
     """A single cluster node identified by its uid string."""
     def __init__(self, uid: str, name: str=None):
         self.uid = uid
@@ -44,9 +44,9 @@ class ClusterLeaf(Cluster):
         return string_rep
 
 
-class ClusterAnd(Cluster):
+class IndexAnd(IndexExpr):
     """Conjunction (meet) of two cluster expressions: elementwise min."""
-    def __init__(self, left: Cluster, right: Cluster):
+    def __init__(self, left: IndexExpr, right: IndexExpr):
         self.left = left
         self.right = right
 
@@ -54,9 +54,9 @@ class ClusterAnd(Cluster):
         return f"({self.left} & {self.right})"
 
 
-class ClusterOr(Cluster):
+class IndexOr(IndexExpr):
     """Disjunction (join) of two cluster expressions: elementwise max."""
-    def __init__(self, left: Cluster, right: Cluster):
+    def __init__(self, left: IndexExpr, right: IndexExpr):
         self.left = left
         self.right = right
 
@@ -64,18 +64,17 @@ class ClusterOr(Cluster):
         return f"({self.left} | {self.right})"
 
 
-class ClusterNot(Cluster):
+class IndexNot(IndexExpr):
     """
     Heyting negation of a cluster expression.
     ~a  = 255 where strength == 0, else 0
     ~~a = 255 where strength > 0,  else 0
     """
-    def __init__(self, operand: Cluster):
+    def __init__(self, operand: IndexExpr):
         self.operand = operand
 
     def __repr__(self):
         return f"~{self.operand}"
-
 
 # =================== Soft Cluster Tree ===================
 
@@ -217,25 +216,25 @@ class SoftClusterTree:
         else:
             return np.array(self.layers[layer].getcol(col).toarray()).flatten()
 
-    def _evaluate(self, expr: Cluster) -> np.ndarray:
+    def _evaluate(self, expr: IndexExpr) -> np.ndarray:
         """
         Recursively evaluate a Cluster expression tree,
         returning a dense uint8 vector of shape (n_docs,).
         """
-        if isinstance(expr, ClusterLeaf):
+        if isinstance(expr, Cluster):
             return self._get_strength_vector(expr.uid)
 
-        elif isinstance(expr, ClusterAnd):
+        elif isinstance(expr, IndexAnd):
             left = self._evaluate(expr.left)
             right = self._evaluate(expr.right)
             return np.minimum(left, right)
 
-        elif isinstance(expr, ClusterOr):
+        elif isinstance(expr, IndexOr):
             left = self._evaluate(expr.left)
             right = self._evaluate(expr.right)
             return np.maximum(left, right)
 
-        elif isinstance(expr, ClusterNot):
+        elif isinstance(expr, IndexNot):
             operand = self._evaluate(expr.operand)
             # Heyting negation: 255 where strength == 0, else 0
             result = np.zeros(self.n_docs, dtype=np.uint8)
@@ -249,7 +248,7 @@ class SoftClusterTree:
 
     def inside(
         self,
-        expr: Union[Cluster, str],
+        expr: Union[IndexExpr, str],
         min_strength: float = 1.0,
     ) -> np.ndarray:
         """
@@ -271,7 +270,7 @@ class SoftClusterTree:
             Array of document indices.
         """
         if isinstance(expr, str):
-            expr = ClusterLeaf(expr)
+            expr = Cluster(expr)
         threshold = self.to_int(min_strength)
         strengths = self._evaluate(expr)
         return np.where(strengths >= threshold)[0]
@@ -351,7 +350,7 @@ class SoftClusterTree:
 
     def strengths(
         self,
-        expr: Union[Cluster, str],
+        expr: Union[IndexExpr, str],
         indices: np.ndarray = None,
         as_float: bool = True,
     ) -> np.ndarray:
@@ -377,16 +376,16 @@ class SoftClusterTree:
         if indices is None:
             indices = np.arange(self.n_docs)
         if isinstance(expr, str):
-            expr = ClusterLeaf(expr)
+            expr = Cluster(expr)
         strength_vector = self._evaluate(expr)
         result = strength_vector[indices]
         if as_float:
             return self.to_float(result)
         return result
 
-    def leaf(self, layer: int, cluster_number: int) -> ClusterLeaf:
+    def cluster(self, layer: int, cluster_number: int) -> Cluster:
         """
-        Convenience method to construct a ClusterLeaf from
+        Convenience method to construct a Cluster from
         a (layer, cluster_number) pair.
 
         Parameters
@@ -396,9 +395,9 @@ class SoftClusterTree:
 
         Returns
         -------
-        ClusterLeaf
+        Cluster
         """
-        return ClusterLeaf(topic_uid((layer, cluster_number)))
+        return Cluster(topic_uid((layer, cluster_number)))
 
     @property
     def topics(self):
@@ -408,3 +407,4 @@ class SoftClusterTree:
     def cluster_matrices(self):
         """Reconstruct the dense cluster matrices for saving purposes. """
         return [matrix.todense() for matrix in self.layers]
+    

@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Union, List, Optional
 import pandas as pd
-from .softclustertree import Cluster
+from .softclustertree import IndexExpr
 from .utilities import topic_uid
 
 class IndexQuery:
@@ -71,7 +71,7 @@ class IndexQuery:
         """Return the embedding vectors for these indices."""
         return self.db._embeddings(self.indices)
 
-    def strengths(self, expr: Union[Cluster, str]) -> np.ndarray:
+    def strengths(self, expr: Union[IndexExpr, str]) -> np.ndarray:
         """
         Return the inclusion strengths of these documents for a cluster expression.
 
@@ -276,5 +276,18 @@ class RootQuery:
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """      
-        all_topics = self.db.index.values
         return TopicQuery(self.db, self.db._topics_where(query))
+
+    def index_expr(self, expr: IndexExpr, min_strength: float=1.0) -> IndexQuery:
+        """
+        Initialize an IndexQuery with the indices inside an IndexExpr 
+
+        Parameters
+        ----------
+        expr: IndexExpr
+            The expression to evaluate 
+        min_strength: float (optional default=1.0)
+            Minimum inclusion strength in [0, 1].
+        """
+        indices = self.db.soft_cluster_tree.inside(expr, min_strength=min_strength)
+        return IndexQuery(self.db, indices)

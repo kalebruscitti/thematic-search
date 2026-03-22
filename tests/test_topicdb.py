@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from thematic_search.softclustertree import SoftClusterTree, ClusterLeaf
+from thematic_search.softclustertree import SoftClusterTree, Cluster
 from thematic_search.topicdatabase import TopicDatabase
 from thematic_search.queries import  IndexQuery, TopicQuery
 from thematic_search.utilities import topic_uid, uid_to_ints
@@ -111,7 +111,7 @@ class TestSoftClusterTree:
 
     def test_inside_double_negation(self):
         """~~a should return docs with any nonzero strength."""
-        leaf = self.tree.leaf(0, 0)
+        leaf = self.tree.cluster(0, 0)
         idx_double_neg = self.tree.inside(~~leaf, min_strength=1.0)
         uid = topic_uid((0, 0))
         strengths = self.tree._get_strength_vector(uid)
@@ -120,7 +120,7 @@ class TestSoftClusterTree:
 
     def test_inside_negation(self):
         """~a should return docs with zero strength."""
-        leaf = self.tree.leaf(0, 0)
+        leaf = self.tree.cluster(0, 0)
         idx_neg = self.tree.inside(~leaf, min_strength=1.0)
         uid = topic_uid((0, 0))
         strengths = self.tree._get_strength_vector(uid)
@@ -129,8 +129,8 @@ class TestSoftClusterTree:
 
     def test_inside_and(self):
         """a & b should return docs where min(strength_a, strength_b) >= threshold."""
-        a = self.tree.leaf(0, 0)
-        b = self.tree.leaf(0, 1)
+        a = self.tree.cluster(0, 0)
+        b = self.tree.cluster(0, 1)
         idx_and = self.tree.inside(a & b, min_strength=0.5)
         sa = self.tree._get_strength_vector(topic_uid((0, 0)))
         sb = self.tree._get_strength_vector(topic_uid((0, 1)))
@@ -140,8 +140,8 @@ class TestSoftClusterTree:
 
     def test_inside_or(self):
         """a | b should return docs where max(strength_a, strength_b) >= threshold."""
-        a = self.tree.leaf(0, 0)
-        b = self.tree.leaf(0, 1)
+        a = self.tree.cluster(0, 0)
+        b = self.tree.cluster(0, 1)
         idx_or = self.tree.inside(a | b, min_strength=0.5)
         sa = self.tree._get_strength_vector(topic_uid((0, 0)))
         sb = self.tree._get_strength_vector(topic_uid((0, 1)))
@@ -303,7 +303,7 @@ class TestTopicDatabase:
 
     def test_strengths_in_chain(self):
         iq = self.db.q.from_docs([0]).nearby()
-        leaf = self.sct.leaf(0, 0)
+        leaf = self.sct.cluster(0, 0)
         s = iq.strengths(leaf)
         assert len(s) == self.db.default_k
         assert np.all(s >= 0) and np.all(s <= 1)
