@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.sparse
+from scipy.sparse.csgraph import floyd_warshall
 import warnings
 from typing import Union
 from .utilities import *
@@ -115,14 +116,6 @@ class SoftClusterTree:
         self.n_layers = len(cluster_matrices)
 
         self._validate(cluster_matrices, cluster_tree)
-        self.layers = []
-        for m in cluster_matrices:
-            if scipy.sparse.issparse(m):
-                self.layers.append(m)
-            else:
-                self.layers.append(
-                    self._sparsify(m, sparsity_threshold)
-                )
 
         self.uid_to_loc = {}   # uid -> (layer, col_index)
         self.loc_to_uid = {}   # (layer, col_index) -> uid
@@ -131,6 +124,18 @@ class SoftClusterTree:
                 uid = topic_uid((l, j))
                 self.uid_to_loc[uid] = (l, j)
                 self.loc_to_uid[(l, j)] = uid
+                self.layers = []
+
+        self.layers = []
+        for m in cluster_matrices:
+            if scipy.sparse.issparse(m):
+                warnings.warn("You passed sparse matrices," \
+                " SoftClusterTree is assuming they are ranged in [0,255]")
+                self.layers.append(m)
+            else:
+                self.layers.append(
+                    self._sparsify(m, sparsity_threshold)
+                )
 
         self.children_map = {}  # uid -> list of child uids
         self.parent_map = {}    # uid -> list of parent uids  (DAG: may be multiple)
@@ -152,6 +157,38 @@ class SoftClusterTree:
             )
         self.root_uid = roots[0]
         self.uid_to_loc[self.root_uid] = (self.n_layers, 0)
+        self.uids = list(self.uid_to_loc.keys())
+        self.uid_to_idx = {uid: i for i, uid in enumerate(self.uids)}
+        self.n_topics = len(self.uids) 
+
+        cluster_matrix = np.zeros(
+            (self.n_docs, self.n_topics), dtype=np.uint8
+        )
+        for uid in self.uids:
+            layer, layer_idx = self.uid_to_loc[uid]
+            col_idx = self.uid_to_idx[uid]
+            if layer < self.n_layers:
+                layer_matrix =  (
+                    cluster_matrices[layer].toarray()
+                    if scipy.sparse.issparse(cluster_matrices[layer])
+                    else np.asarray(cluster_matrices[layer])
+                )
+                cluster_matrix[:,col_idx] = layer_matrix[:,layer_idx]
+            else:
+                cluster_matrix[:,col_idx] = 1
+        self.cluster_matrix = self._sparsify(cluster_matrix, sparsity_threshold)
+        # Compute transitive closure matrix of the tree
+        # This needs to be stored for quick indexed colimits
+        A = np.zeros((self.n_topics, self.n_topics), dtype=bool)
+        for parent, children in self.children_map.items():
+            i = self.uid_to_idx[parent]
+            for child in children:
+                j = self.uid_to_idx[child]
+                A[i, j] = True
+        self.adjacency_closure = (floyd_warshall(
+            scipy.sparse.csr_matrix(A)
+        )<np.inf).astype(int)  
+
 
     # =================== Utilities ===================
 
@@ -401,10 +438,12 @@ class SoftClusterTree:
 
     @property
     def topics(self):
-        return [self.leaf(uid) for uid in self.uid_to_loc.keys()]
-        
+        return [self.cluster(uid) for uid in self.uid_to_loc.keys()]
+
     @property
     def cluster_matrices(self):
         """Reconstruct the dense cluster matrices for saving purposes. """
         return [matrix.todense() for matrix in self.layers]
+    
+
     

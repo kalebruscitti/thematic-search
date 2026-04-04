@@ -4,6 +4,49 @@ import pandas as pd
 from .softclustertree import IndexExpr
 from .utilities import topic_uid
 
+class FuzzyQuery:
+    """
+    A query object operating on the entire soft cluster matrix at once.
+    """
+    def __init__(self, db, matrix: np.ndarray):
+        self.db = db
+        self.matrix = matrix
+        self.uid_to_idx = self.db.soft_cluster_tree.uid_to_idx
+
+    def samples_where(self, query: str):
+        indices = self.db._docs_where(
+            np.arange(self.matrix.shape[0]),
+            query
+        )
+        self.matrix[~indices,:] = 0
+        return FuzzyQuery(self, self.db, self.matrix)
+
+    def topics_where(self, query: str):
+        uids = self.db._topics_where(
+            self.db.soft_cluster_tree.uids, 
+            query
+        )
+        indices = [self.uid_to_idx[uid] for uid in uids]
+        self.matrix[:, ~indices] = 0
+        A = self.db.soft_cluster_tree.adjacency_closure
+        indexed_colimit = np.max(
+            self.matrix[:, :, None] * A[None, :, :],
+            axis=1
+        )
+        return FuzzyQuery(self, self.db, indexed_colimit)
+
+    def samples(self, threshold: float=1.0):
+        sample_vec = np.max(self.matrix, axis=1)
+        indices = (sample_vec>=threshold).nonzero()[0]
+        return IndexQuery(self.db, indices)
+    
+    def topics(self, threshold: float=1.0):
+        topic_vec = np.max(self.matrix, axis=0)
+        indices = (topic_vec>=threshold).nonzero()[0]  
+        idx_to_uid = {v:k for k,v in self.uid_to_idx}
+        uids = np.array([idx_to_uid[i] for i in indices])
+        return TopicQuery(self.db, uids)
+
 class IndexQuery:
     """
     A query object carrying a set of document indices.
