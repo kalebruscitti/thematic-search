@@ -2,7 +2,6 @@ import numpy as np
 from typing import Union, List, Optional
 import pandas as pd
 from .softclustertree import IndexExpr
-from .utilities import topic_uid
 
 class FuzzyQuery:
     """
@@ -11,7 +10,7 @@ class FuzzyQuery:
     def __init__(self, db, matrix: np.ndarray):
         self.db = db
         self.matrix = matrix
-        self.uid_to_idx = self.db.soft_cluster_tree.uid_to_idx
+        self.idx_to_idx = self.db.soft_cluster_tree.idx_to_idx
 
     def samples_where(self, query: str):
         indices = self.db._docs_where(
@@ -22,11 +21,11 @@ class FuzzyQuery:
         return FuzzyQuery(self, self.db, self.matrix)
 
     def topics_where(self, query: str):
-        uids = self.db._topics_where(
-            self.db.soft_cluster_tree.uids, 
+        indices = self.db._topics_where(
+            self.db.soft_cluster_tree.indices, 
             query
         )
-        indices = [self.uid_to_idx[uid] for uid in uids]
+        indices = [self.idx_to_idx[idx] for idx in indices]
         self.matrix[:, ~indices] = 0
         A = self.db.soft_cluster_tree.adjacency_closure
         indexed_colimit = np.max(
@@ -43,9 +42,9 @@ class FuzzyQuery:
     def topics(self, threshold: float=1.0):
         topic_vec = np.max(self.matrix, axis=0)
         indices = (topic_vec>=threshold).nonzero()[0]  
-        idx_to_uid = {v:k for k,v in self.uid_to_idx}
-        uids = np.array([idx_to_uid[i] for i in indices])
-        return TopicQuery(self.db, uids)
+        idx_to_idx = {v:k for k,v in self.idx_to_idx}
+        indices = np.array([idx_to_idx[i] for i in indices])
+        return TopicQuery(self.db, indices)
 
 class IndexQuery:
     """
@@ -103,8 +102,8 @@ class IndexQuery:
         Find the most specific topic that best covers these document indices,
         weighted by their soft membership strengths.
         """
-        topic_uid = self.db._theme(self.indices)
-        return TopicQuery(self.db, [topic_uid])
+        topic_idx = self.db._theme(self.indices)
+        return TopicQuery(self.db, [topic_idx])
 
     def documents(self) -> pd.DataFrame:
         """Return the document metadata rows for these indices."""
@@ -121,7 +120,7 @@ class IndexQuery:
         Parameters
         ----------
         expr : Cluster or str
-            A Cluster expression or uid string.
+            A Cluster expression or idx string.
 
         Returns
         -------
@@ -143,39 +142,39 @@ class IndexQuery:
 
 class TopicQuery:
     """
-    A query object carrying a set of topic uids.
+    A query object carrying a set of topic indices.
     Supports navigation within the topic tree or retrieval of topic data.
 
     Typical usage:
         topicdb.q.search("jazz music").theme().parents().info()
     """
-    def __init__(self, db, uids: list):
+    def __init__(self, db, indices: list):
         self.db = db
-        self.uids = uids
+        self.indices = indices
 
     def __repr__(self):
-        return f"TopicQuery({len(self.uids)} topics)"
+        return f"TopicQuery({len(self.indices)} topics)"
 
     def unwrap(self) -> list:
-        return self.uids
+        return self.indices
 
     def parents(self) -> "TopicQuery":
         """Return the parent topics of these topics."""
         result = set()
-        for uid in self.uids:
-            result.update(self.db.soft_cluster_tree.parents(uid))
+        for idx in self.indices:
+            result.update(self.db.soft_cluster_tree.parents(idx))
         return TopicQuery(self.db, list(result))
 
     def children(self) -> "TopicQuery":
         """Return the child topics of these topics."""
         result = set()
-        for uid in self.uids:
-            result.update(self.db.soft_cluster_tree.children(uid))
+        for idx in self.indices:
+            result.update(self.db.soft_cluster_tree.children(idx))
         return TopicQuery(self.db, list(result))
 
     def least_upper_bound(self) -> "TopicQuery":
         """Return the least upper bound (lowest common ancestor) of these topics."""
-        return TopicQuery(self.db, self.db.soft_cluster_tree.join(self.uids))
+        return TopicQuery(self.db, self.db.soft_cluster_tree.join(self.indices))
 
     def inside(
         self,
@@ -190,15 +189,15 @@ class TopicQuery:
             Minimum inclusion strength in [0, 1].
         """
         indices = set()
-        for uid in self.uids:
+        for idx in self.indices:
             indices.update(
-                self.db.soft_cluster_tree.inside(uid, min_strength=min_strength).tolist()
+                self.db.soft_cluster_tree.inside(idx, min_strength=min_strength).tolist()
             )
         return IndexQuery(self.db, np.array(sorted(indices)))
 
     def info(self) -> pd.DataFrame:
         """Return topic metadata rows for these topics."""
-        return self.db._info(self.uids)
+        return self.db._info(self.indices)
     
     def where(self, query:str ) -> "IndexQuery":
         """
@@ -208,7 +207,7 @@ class TopicQuery:
         -------
         query.where("layer>=1")
         """
-        topics = self.db._topics_where(self.uids, query)
+        topics = self.db._topics_where(self.indices, query)
         return TopicQuery(self.db, topics)
 
 
@@ -264,18 +263,18 @@ class RootQuery:
         layer : int
         cluster_number : int
         """
-        uid = topic_uid((layer, cluster_number))
-        return TopicQuery(self.db, [uid])
+        idx = self.db.soft_cluster_tree.loc_to_idx[(layer, cluster_number)]
+        return TopicQuery(self.db, [idx])
 
-    def topic_uid(self, uid: str) -> TopicQuery:
+    def topic_idx(self, idx: str) -> TopicQuery:
         """
-        Enter the query via a known topic uid string.
+        Enter the query via a known topic index.
 
         Parameters
         ----------
-        uid : str
+        idx : int
         """
-        return TopicQuery(self.db, [uid])
+        return TopicQuery(self.db, [idx])
 
     def topic_name(self, name: str) -> TopicQuery:
         """
@@ -287,15 +286,15 @@ class RootQuery:
         """
         match_df = self.db.topic_df[self.db.topic_df['name']==name]
         if len(match_df)==1:
-            uid = match_df.index[0]
-            return TopicQuery(self.db, [uid])
+            idx = match_df.index[0]
+            return TopicQuery(self.db, [idx])
         elif len(match_df)==0:
             print(f"No topics with name '{name}' found.")
             return TopicQuery(self.db, [])
         elif len(match_df)>1:
             print(f"Multiple topics with name '{name}' found:")
             print(match_df)
-            print(f"Please select a topic by UID to disambiguate.")
+            print(f"Please select a topic by index to disambiguate.")
             return TopicQuery(self.db, [])
 
     def docs_where(self, query: str) -> IndexQuery:

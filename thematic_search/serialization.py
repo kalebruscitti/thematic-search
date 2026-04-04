@@ -40,7 +40,7 @@ def save_topic_database(topicdb, path):
         # --- DataFrames ---
         topicdb.document_df.to_parquet(root / "document_df.parquet")
         topic_df = deepcopy(topicdb.topic_df)
-        topic_df["uid"] = topic_df.index
+        topic_df["uid"] = [topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index]
         topic_df.to_parquet(root / "topic_df.parquet")
 
         # --- Vectors ---
@@ -55,8 +55,16 @@ def save_topic_database(topicdb, path):
             sp.save_npz(matrices_dir / f"layer_{i}.npz", matrix)
 
         # --- Cluster tree topology ---
+        idx_to_uid = {
+            i:topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i])
+            for i in range(topicdb.soft_cluster_tree.n_topics)
+        }
+        uid_tree = {
+            idx_to_uid[k]:[idx_to_uid[c] for c in children] 
+            for k, children in topicdb.soft_cluster_tree.children_map.items()
+        }
         with open(root / "cluster_tree.json", "w") as f:
-            json.dump(topicdb.soft_cluster_tree.children_map, f)
+            json.dump(uid_tree, f)
 
         # --- Metadata ---
         metadata = {
@@ -111,7 +119,8 @@ def load_topic_database(path, SoftClusterTree, TopicDatabase):
         # --- DataFrames ---
         document_df = pd.read_parquet(root / "document_df.parquet")
         topic_df = pd.read_parquet(root / "topic_df.parquet")
-        topic_df = topic_df.set_index("uid")
+        topic_df = topic_df.drop(columns=["uid"])
+        topic_df.index.name = 'index'
 
         # --- Vectors ---
         embedding_vectors = np.load(root / "embedding_vectors.npy")
@@ -214,7 +223,7 @@ def save_topic_database_lance(topicdb, path):
 
     # --- topics.lance ---
     topic_df = deepcopy(topicdb.topic_df)
-    topic_df["uid"] = topic_df.index
+    topic_df["uid"] = [topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index]
     topic_dict = {col: topic_df[col].tolist() for col in topic_df.columns}
     topic_table = pa.table(topic_dict)
     lance.write_dataset(topic_table, str(path / "topics.lance"))
@@ -239,13 +248,21 @@ def save_topic_database_lance(topicdb, path):
     })
     lance.write_dataset(clusters_table, str(path / "clusters.lance"))
 
+    idx_to_uid = {
+        i:topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i])
+        for i in range(topicdb.soft_cluster_tree.n_topics)
+    }
+    uid_tree = {
+        idx_to_uid[k]:[idx_to_uid[c] for c in children] 
+        for k, children in topicdb.soft_cluster_tree.children_map.items()
+    }
     # --- config.lance ---
     config_table = pa.table({
         "serial_version": pa.array([_SERIAL_VERSION],  type=pa.string()),
         "n_layers":       pa.array([len(topicdb.soft_cluster_tree.layers)], type=pa.int32()),
         "has_reduced":    pa.array([has_reduced],       type=pa.bool_()),
         "cluster_tree":   pa.array(
-            [json.dumps(topicdb.soft_cluster_tree.children_map)],
+            [json.dumps(uid_tree)],
             type=pa.string(),
         ),
     })
@@ -299,7 +316,9 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
 
     # --- topics ---
     topic_dict = lance.dataset(str(path / "topics.lance")).to_table().to_pydict()
-    topic_df = pd.DataFrame(topic_dict).set_index('uid')
+    topic_df = pd.DataFrame(topic_dict)
+    topic_df = topic_df.drop(columns=["uid"])
+    topic_df.index.name = 'index'
     
     # --- clusters: reconstruct one csr_matrix per layer ---
     coo_dict = lance.dataset(str(path / "clusters.lance")).to_table().to_pydict()

@@ -33,13 +33,13 @@ class IndexExpr:
 
 
 class Cluster(IndexExpr):
-    """A single cluster node identified by its uid string."""
-    def __init__(self, uid: str, name: str=None):
-        self.uid = uid
+    """A single cluster node identified by its index."""
+    def __init__(self, idx: int, name: str=None):
+        self.idx = idx
         self.name = name
 
     def __repr__(self):
-        string_rep = f"ClusterLeaf({self.uid})"
+        string_rep = f"ClusterLeaf({self.idx})"
         if self.name:
             string_rep += f" `{self.name}`"
         return string_rep
@@ -117,14 +117,18 @@ class SoftClusterTree:
 
         self._validate(cluster_matrices, cluster_tree)
 
-        self.uid_to_loc = {}   # uid -> (layer, col_index)
-        self.loc_to_uid = {}   # (layer, col_index) -> uid
+        self.idx_to_loc = {}   # idx -> (layer, col_index)
+        self.loc_to_idx = {}   # (layer, col_index) -> idx
+        idx = 0
         for l, matrix in enumerate(cluster_matrices):
             for j in range(matrix.shape[1]):
-                uid = topic_uid((l, j))
-                self.uid_to_loc[uid] = (l, j)
-                self.loc_to_uid[(l, j)] = uid
-                self.layers = []
+                self.idx_to_loc[idx] = (l, j)
+                self.loc_to_idx[(l, j)] = idx
+                idx += 1
+        # don't forget the root node.
+        self.loc_to_idx[(l+1, 0)] = idx
+        self.idx_to_loc[idx] = [(l+1, 0)]
+        self.n_topics = idx+1
 
         self.layers = []
         for m in cluster_matrices:
@@ -137,36 +141,32 @@ class SoftClusterTree:
                     self._sparsify(m, sparsity_threshold)
                 )
 
-        self.children_map = {}  # uid -> list of child uids
-        self.parent_map = {}    # uid -> list of parent uids  (DAG: may be multiple)
+        self.children_map = {}  # idx -> list of child indices
+        self.parent_map = {}    # idx -> list of parent indices
         for node, children in cluster_tree.items():
-            node_uid = topic_uid(node)
-            child_uids = [topic_uid(c) for c in children]
-            self.children_map[node_uid] = child_uids
-            for child_uid in child_uids:
-                self.parent_map.setdefault(child_uid, [])
-                self.parent_map[child_uid].append(node_uid)
+            node_idx = self.loc_to_idx[node]
+            child_indices = [self.loc_to_idx[c] for c in children]
+            self.children_map[node_idx] = child_indices
+            for child_idx in child_indices:
+                self.parent_map.setdefault(child_idx, [])
+                self.parent_map[child_idx].append(node_idx)
 
         # Identify the root: the unique node in cluster_tree with no parents
-        all_children = {topic_uid(c) for children in cluster_tree.values() for c in children}
-        roots = [topic_uid(n) for n in cluster_tree if topic_uid(n) not in all_children]
+        all_children = {self.loc_to_idx[c] for children in cluster_tree.values() for c in children}
+        roots = [self.loc_to_idx[n] for n in cluster_tree if self.loc_to_idx[n] not in all_children]
         if len(roots) != 1:
             raise ValueError(
                 f"cluster_tree must have exactly one root (a node with no parents), "
                 f"but found {len(roots)}: {roots}"
             )
-        self.root_uid = roots[0]
-        self.uid_to_loc[self.root_uid] = (self.n_layers, 0)
-        self.uids = list(self.uid_to_loc.keys())
-        self.uid_to_idx = {uid: i for i, uid in enumerate(self.uids)}
-        self.n_topics = len(self.uids) 
+        self.root_idx = roots[0]
+        self.idx_to_loc[self.root_idx] = (self.n_layers, 0)
 
         cluster_matrix = np.zeros(
             (self.n_docs, self.n_topics), dtype=np.uint8
         )
-        for uid in self.uids:
-            layer, layer_idx = self.uid_to_loc[uid]
-            col_idx = self.uid_to_idx[uid]
+        for col_idx in range(self.n_topics):
+            layer, layer_idx = self.idx_to_loc[idx]
             if layer < self.n_layers:
                 layer_matrix =  (
                     cluster_matrices[layer].toarray()
@@ -180,10 +180,8 @@ class SoftClusterTree:
         # Compute transitive closure matrix of the tree
         # This needs to be stored for quick indexed colimits
         A = np.zeros((self.n_topics, self.n_topics), dtype=bool)
-        for parent, children in self.children_map.items():
-            i = self.uid_to_idx[parent]
-            for child in children:
-                j = self.uid_to_idx[child]
+        for i, children in self.children_map.items():
+            for j in children:
                 A[i, j] = True
         self.adjacency_closure = (floyd_warshall(
             scipy.sparse.csr_matrix(A)
@@ -241,12 +239,12 @@ class SoftClusterTree:
                         f"but layer {cl} only has {n_child_clusters} clusters."
                     )
 
-    def _get_strength_vector(self, uid: str) -> np.ndarray:
+    def _get_strength_vector(self, idx: int) -> np.ndarray:
         """
         Return the dense uint8 inclusion strength vector (shape: n_docs,)
-        for a given cluster uid.
+        for a given cluster idx.
         """
-        layer, col = self.uid_to_loc[uid]
+        layer, col = self.idx_to_loc[idx]
         if layer == self.n_layers:
             # root node.
             return np.full((self.n_docs,1), 255, dtype=np.uint8)
@@ -259,7 +257,7 @@ class SoftClusterTree:
         returning a dense uint8 vector of shape (n_docs,).
         """
         if isinstance(expr, Cluster):
-            return self._get_strength_vector(expr.uid)
+            return self._get_strength_vector(expr.idx)
 
         elif isinstance(expr, IndexAnd):
             left = self._evaluate(expr.left)
@@ -294,8 +292,8 @@ class SoftClusterTree:
 
         Parameters
         ----------
-        expr : Cluster or str
-            A Cluster expression or a uid string for a single cluster.
+        expr : Cluster or int
+            A Cluster expression or an index for a single cluster.
         min_strength : float, optional (default=1.0)
             Minimum inclusion strength in [0, 1].
             - min_strength=1.0 means full membership (strength == 255)
@@ -306,66 +304,66 @@ class SoftClusterTree:
         np.ndarray
             Array of document indices.
         """
-        if isinstance(expr, str):
+        if isinstance(expr, int):
             expr = Cluster(expr)
         threshold = self.to_int(min_strength)
         strengths = self._evaluate(expr)
         return np.where(strengths >= threshold)[0]
 
-    def parents(self, uid: str) -> list:
+    def parents(self, idx: int) -> list:
         """
-        Return the parent uids of a cluster, or an empty list if it is the root.
+        Return the parent indices of a cluster, or an empty list if it is the root.
 
         Parameters
         ----------
-        uid : str
-            The uid of the cluster.
+        idx : str
+            The idx of the cluster.
 
         Returns
         -------
         list of str
-            A list of parent uids, or empty if uid is the root.
+            A list of parent indices, or empty if idx is the root.
         """
-        return self.parent_map.get(uid, [])
+        return self.parent_map.get(idx, [])
 
-    def children(self, uid: str) -> list:
+    def children(self, idx: int) -> list:
         """
-        Return the child uids of a cluster.
+        Return the child indices of a cluster.
 
         Parameters
         ----------
-        uid : str
-            The uid of the cluster.
+        idx : str
+            The idx of the cluster.
 
         Returns
         -------
         list of str
-            List of child uids, empty if uid is a leaf.
+            List of child indices, empty if idx is a leaf.
         """
-        return self.children_map.get(uid, [])
+        return self.children_map.get(idx, [])
 
-    def join(self, uids: list) -> list:
+    def join(self, indices: list) -> list:
         """
-        Return the uids of the least upper bounds (LUBs) of a set of clusters,
+        Return the indices of the least upper bounds (LUBs) of a set of clusters,
         i.e. their lowest common ancestors in the DAG. There may be multiple
         incomparable LUBs at the same minimum layer.
 
         Parameters
         ----------
-        uids : list of str
-            List of cluster uids.
+        indices : list of str
+            List of cluster indices.
 
         Returns
         -------
         list of str
-            The uids of the LUB clusters.
+            The indices of the LUB clusters.
         """
-        if len(uids) == 1:
-            return uids
+        if len(indices) == 1:
+            return indices
 
-        def ancestors(uid):
+        def ancestors(idx):
             visited = set()
-            queue = [uid]
+            queue = [idx]
             while queue:
                 current = queue.pop()
                 if current in visited:
@@ -374,20 +372,20 @@ class SoftClusterTree:
                 queue.extend(self.parent_map.get(current, []))
             return visited
 
-        ancestor_sets = [ancestors(uid) for uid in uids]
+        ancestor_sets = [ancestors(idx) for idx in indices]
         common = ancestor_sets[0].intersection(*ancestor_sets[1:])
 
         if not common:
-            return [self.root_uid]
+            return [self.root_idx]
 
-        min_layer = min(self.uid_to_loc[u][0] for u in common)
-        return [u for u in common if self.uid_to_loc[u][0] == min_layer]
+        min_layer = min(self.idx_to_loc[u][0] for u in common)
+        return [u for u in common if self.idx_to_loc[u][0] == min_layer]
 
     #=== API/Utilities ===#
 
     def strengths(
         self,
-        expr: Union[IndexExpr, str],
+        expr: Union[IndexExpr, int],
         indices: np.ndarray = None,
         as_float: bool = True,
     ) -> np.ndarray:
@@ -399,8 +397,8 @@ class SoftClusterTree:
         ----------
         indices : np.ndarray
             Array of document indices (e.g. as returned by inside()).
-        expr : Cluster or str
-            A Cluster expression or a uid string for a single cluster.
+        expr : Cluster or int
+            A Cluster expression or the index for a single cluster.
         as_float : bool, optional (default=True)
             If True, return strengths as floats in [0, 1].
             If False, return raw uint8 values in [0, 255].
@@ -412,7 +410,7 @@ class SoftClusterTree:
         """
         if indices is None:
             indices = np.arange(self.n_docs)
-        if isinstance(expr, str):
+        if isinstance(expr, int):
             expr = Cluster(expr)
         strength_vector = self._evaluate(expr)
         result = strength_vector[indices]
@@ -434,11 +432,11 @@ class SoftClusterTree:
         -------
         Cluster
         """
-        return Cluster(topic_uid((layer, cluster_number)))
+        return Cluster(self.loc_to_idx[(layer, cluster_number)])
 
     @property
     def topics(self):
-        return [self.cluster(uid) for uid in self.uid_to_loc.keys()]
+        return [self.cluster(idx) for idx in self.idx_to_loc.keys()]
 
     @property
     def cluster_matrices(self):

@@ -12,7 +12,6 @@ from .serialization import (
     load_topic_database_lance,
 )
 from .queries import *
-from .utilities import topic_uid
 
 class TopicDatabase:
     """
@@ -35,12 +34,12 @@ class TopicDatabase:
     document_df : pd.DataFrame, optional
         Document metadata. If None, a minimal DataFrame with just indices is created.
     topic_df : pd.DataFrame, optional
-        Topic metadata. Must have a 'uid' column as primary key if provided.
-        If None, a minimal DataFrame with uid, layer and cluster_number is created.
+        Topic metadata. Must have an 'index' column as primary key if provided.
+        If None, a minimal DataFrame with idx, layer and cluster_number is created.
     cluster_labels : dict, optional
         A dict mapping (layer, cluster_number) tuples to original node labels,
         as returned by convert_tree(). If provided, topic_df.index is expected
-        to use those original labels and will be re-indexed to UIDs internally.
+        to use those original labels and will be re-indexed to numeric indices internally.
         The mapping is stored as self.cluster_labels for display purposes.
     embedding_model : optional
         A SentenceTransformer model for use with topicdb.q.search().
@@ -83,29 +82,29 @@ class TopicDatabase:
             self.topic_df = self._minimal_topic_df()
         else:
             if cluster_labels is not None:
-                # Re-index from original node labels to UIDs
-                label_to_uid = {v: topic_uid(k) for k, v in cluster_labels.items()}
-                unknown = set(topic_df.index) - set(label_to_uid.keys())
+                # Re-index from original node labels to indices
+                label_to_idx = {v: i for i, v in enumerate(cluster_labels.items())}
+                unknown = set(topic_df.index) - set(label_to_idx.keys())
                 if unknown:
                     warnings.warn(
                         f"topic_df contains {len(unknown)} row(s) with labels not "
                         f"found in cluster_labels; they will be dropped: {unknown}"
                     )
-                    topic_df = topic_df.loc[topic_df.index.isin(label_to_uid)]
+                    topic_df = topic_df.loc[topic_df.index.isin(label_to_idx)]
                 topic_df = topic_df.copy()
-                topic_df.index = topic_df.index.map(label_to_uid)
+                topic_df.index = topic_df.index.map(label_to_idx)
             self.topic_df = topic_df
 
     def _minimal_topic_df(self) -> pd.DataFrame:
         """Build a minimal topic metadata DataFrame from the SoftClusterTree."""
         rows = []
-        for uid, (layer, cluster_number) in self.soft_cluster_tree.uid_to_loc.items():
+        for idx, (layer, cluster_number) in self.soft_cluster_tree.idx_to_loc.items():
             rows.append({
-                "uid": uid,
+                "index": idx,
                 "layer": layer,
                 "cluster_number": cluster_number,
             })
-        return pd.DataFrame(rows).set_index("uid")
+        return pd.DataFrame(rows).set_index("index")
 
     @property
     def q(self) -> RootQuery:
@@ -115,7 +114,7 @@ class TopicDatabase:
     @property
     def topics(self):
         try:
-            return [self.leaf(uid, self.topic_df.loc[uid].name) for uid in self.uid_to_loc.keys()]
+            return [self.leaf(idx, self.topic_df.loc[idx].name) for idx in self.idx_to_loc.keys()]
         except:
             return self.soft_cluster_tree.topics
 
@@ -135,9 +134,9 @@ class TopicDatabase:
         """Return document metadata rows for a set of indices."""
         return self.document_df.iloc[indices]
 
-    def _info(self, uids: list) -> pd.DataFrame:
-        """Return topic metadata rows for a set of uids."""
-        return self.topic_df.loc[self.topic_df.index.isin(uids)]
+    def _info(self, indices: list) -> pd.DataFrame:
+        """Return topic metadata rows for a set of indices."""
+        return self.topic_df.loc[self.topic_df.index.isin(indices)]
 
     def _docs_where(self, indices: np.ndarray, query: str) -> np.ndarray:
         """Filter document indices by metadata column values."""
@@ -145,9 +144,9 @@ class TopicDatabase:
         result = df.query(query)
         return result.index.to_numpy()
     
-    def _topics_where(self, uids, query: str) -> list:
+    def _topics_where(self, indices, query: str) -> list:
         """Filter topics by metadata column values."""
-        df = self.topic_df.loc[uids]
+        df = self.topic_df.loc[indices]
         result = df.query(query)
         return result.index.to_list()
 
@@ -164,7 +163,7 @@ class TopicDatabase:
                 nonzero_cols = (col_vec>=255*min_strength).nonzero()[1]
                 if len(nonzero_cols) > 0:
                     for col in nonzero_cols:
-                        doc_topics.add(self.soft_cluster_tree.loc_to_uid[(layer, col)])
+                        doc_topics.add(self.soft_cluster_tree.loc_to_idx[(layer, col)])
                     break  # use finest layer only
             topic_sets.append(doc_topics)
 
@@ -197,20 +196,20 @@ class TopicDatabase:
         Returns
         -------
         str
-            The uid of the best matching topic.
+            The idx of the best matching topic.
         """
         if len(indices) == 0:
-            return self.soft_cluster_tree.root_uid
+            return self.soft_cluster_tree.root_idx
 
         tree = self.soft_cluster_tree
-        all_uids = list(tree.uid_to_loc.keys())
+        all_indices = list(tree.idx_to_loc.keys())
 
-        best_uid = None
+        best_idx = None
         best_score = -1
 
-        for uid in all_uids:
+        for topic_idx in all_indices:
             # Get soft membership strengths for all query documents
-            strengths = tree.strengths(uid, indices, as_float=True)
+            strengths = tree.strengths(topic_idx, indices, as_float=True)
 
             # Weighted coverage: mean strength over query documents
             coverage = strengths.mean()
@@ -218,15 +217,15 @@ class TopicDatabase:
                 continue
 
             # Layer score: prefer lower layer (more specific) topics
-            layer_score = ((tree.n_layers+1) - tree.uid_to_loc[uid][0])/(tree.n_layers+1)
+            layer_score = ((tree.n_layers+1) - tree.idx_to_loc[topic_idx][0])/(tree.n_layers+1)
 
             score = coverage * layer_score
 
             if score > best_score:
                 best_score = score
-                best_uid = uid
+                best_idx = topic_idx
 
-        return best_uid if best_uid is not None else tree.root_uid
+        return best_idx if best_idx is not None else tree.root_idx
     
     @property 
     def tree(self):
@@ -263,5 +262,5 @@ class TopicDatabase:
             embedding_vectors = topic_model.embedding_vectors,
             reduced_vectors = topic_model.reduced_vectors,
             document_df = topic_model.document_df,
-            topic_df = topic_model.topic_df.set_index('uid'),
+            topic_df = topic_model.topic_df.set_index('idx'),
         )

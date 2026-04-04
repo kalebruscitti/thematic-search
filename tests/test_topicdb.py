@@ -59,12 +59,11 @@ def make_test_data(n_docs=100, n_features=32, seed=42):
     for layer, n_clusters in [(0, 4), (1, 2)]:
         for j in range(n_clusters):
             rows.append({
-                "uid": topic_uid((layer, j)),
                 "layer": layer,
                 "cluster_number": j,
                 "name": f"Topic L{layer}C{j}",
             })
-    topic_df = pd.DataFrame(rows).set_index('uid')
+    topic_df = pd.DataFrame(rows)
 
     return cluster_matrices, cluster_tree, embeddings, document_df, topic_df
 
@@ -89,23 +88,23 @@ class TestSoftClusterTree:
         assert cluster == 2
 
     def test_root_node_exists(self):
-        root = self.tree.root_uid
+        root = self.tree.root_idx
         assert root is not None
         strengths = self.tree._get_strength_vector(root)
         assert np.all(strengths == 255), "Root should have full membership for all docs"
 
     def test_inside_full_membership(self):
-        uid = topic_uid((0, 0))
-        idx = self.tree.inside(uid, min_strength=1.0)
+        topic_idx = self.tree.loc_to_idx[(0,0)]
+        idx = self.tree.inside(topic_idx, min_strength=1.0)
         # At min_strength=1.0, only docs with uint8 strength==255 are returned
-        strengths = self.tree._get_strength_vector(uid)
+        strengths = self.tree._get_strength_vector(topic_idx)
         expected = np.where(strengths == 255)[0]
         np.testing.assert_array_equal(np.sort(idx), np.sort(expected))
 
     def test_inside_partial_membership(self):
-        uid = topic_uid((0, 0))
-        idx_full = self.tree.inside(uid, min_strength=1.0)
-        idx_partial = self.tree.inside(uid, min_strength=0.0)
+        topic_idx = self.tree.loc_to_idx[(0,0)]
+        idx_full = self.tree.inside(topic_idx, min_strength=1.0)
+        idx_partial = self.tree.inside(topic_idx, min_strength=0.0)
         # Partial should return at least as many docs as full
         assert len(idx_partial) >= len(idx_full)
 
@@ -113,8 +112,8 @@ class TestSoftClusterTree:
         """~~a should return docs with any nonzero strength."""
         leaf = self.tree.cluster(0, 0)
         idx_double_neg = self.tree.inside(~~leaf, min_strength=1.0)
-        uid = topic_uid((0, 0))
-        strengths = self.tree._get_strength_vector(uid)
+        topic_idx = self.tree.loc_to_idx[(0,0)]
+        strengths = self.tree._get_strength_vector(topic_idx)
         expected = np.where(strengths > 0)[0]
         np.testing.assert_array_equal(np.sort(idx_double_neg), np.sort(expected))
 
@@ -122,8 +121,8 @@ class TestSoftClusterTree:
         """~a should return docs with zero strength."""
         leaf = self.tree.cluster(0, 0)
         idx_neg = self.tree.inside(~leaf, min_strength=1.0)
-        uid = topic_uid((0, 0))
-        strengths = self.tree._get_strength_vector(uid)
+        topic_idx = self.tree.loc_to_idx[(0,0)]
+        strengths = self.tree._get_strength_vector(topic_idx)
         expected = np.where(strengths == 0)[0]
         np.testing.assert_array_equal(np.sort(idx_neg), np.sort(expected))
 
@@ -132,8 +131,8 @@ class TestSoftClusterTree:
         a = self.tree.cluster(0, 0)
         b = self.tree.cluster(0, 1)
         idx_and = self.tree.inside(a & b, min_strength=0.5)
-        sa = self.tree._get_strength_vector(topic_uid((0, 0)))
-        sb = self.tree._get_strength_vector(topic_uid((0, 1)))
+        sa = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,0)])
+        sb = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,1)])
         threshold = SoftClusterTree.to_int(0.5)
         expected = np.where(np.minimum(sa, sb) >= threshold)[0]
         np.testing.assert_array_equal(np.sort(idx_and), np.sort(expected))
@@ -143,57 +142,57 @@ class TestSoftClusterTree:
         a = self.tree.cluster(0, 0)
         b = self.tree.cluster(0, 1)
         idx_or = self.tree.inside(a | b, min_strength=0.5)
-        sa = self.tree._get_strength_vector(topic_uid((0, 0)))
-        sb = self.tree._get_strength_vector(topic_uid((0, 1)))
+        sa = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,0)])
+        sb = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,1)])
         threshold = SoftClusterTree.to_int(0.5)
         expected = np.where(np.maximum(sa, sb) >= threshold)[0]
         np.testing.assert_array_equal(np.sort(idx_or), np.sort(expected))
 
     def test_parents(self):
-        uid = topic_uid((0, 0))
+        uid = self.tree.loc_to_idx[(0,0)]
         parents = self.tree.parents(uid)
-        assert topic_uid((1, 0)) in parents
+        assert self.tree.loc_to_idx[(1,0)] in parents
 
     def test_children(self):
-        uid = topic_uid((1, 0))
+        uid = self.tree.loc_to_idx[(1,0)]
         children = self.tree.children(uid)
-        assert topic_uid((0, 0)) in children
-        assert topic_uid((0, 1)) in children
+        assert self.tree.loc_to_idx[(0,0)] in children
+        assert self.tree.loc_to_idx[(0,1)] in children
 
     def test_root_has_no_parents(self):
-        assert self.tree.parents(self.tree.root_uid) == []
+        assert self.tree.parents(self.tree.root_idx) == []
 
     def test_leaves_have_no_children(self):
-        uid = topic_uid((0, 0))
+        uid = self.tree.loc_to_idx[(0,0)]
         assert self.tree.children(uid) == []
 
     def test_join_siblings(self):
         """LUB of two siblings should be their parent."""
-        uid0 = topic_uid((0, 0))
-        uid1 = topic_uid((0, 1))
+        uid0 = self.tree.loc_to_idx[(0,0)]
+        uid1 = self.tree.loc_to_idx[(0,1)]
         lub = self.tree.join([uid0, uid1])
-        assert lub == [topic_uid((1, 0))]
+        assert lub == [self.tree.loc_to_idx[(1,0)]]
 
     def test_join_single(self):
-        uid = topic_uid((0, 0))
+        uid = self.tree.loc_to_idx[(0,0)]
         assert self.tree.join([uid]) == [uid]
 
     def test_join_cousins(self):
         """LUB of nodes in different branches should be the root."""
-        uid0 = topic_uid((0, 0))
-        uid2 = topic_uid((0, 2))
+        uid0 = self.tree.loc_to_idx[(0,0)]
+        uid2 = self.tree.loc_to_idx[(0,2)]
         lub = self.tree.join([uid0, uid2])
-        assert lub == [self.tree.root_uid]
+        assert lub == [self.tree.root_idx]
 
     def test_strengths(self):
-        uid = topic_uid((0, 0))
+        uid = self.tree.loc_to_idx[(0,0)]
         idx = np.array([0, 1, 2])
         s = self.tree.strengths(uid, idx)
         assert s.shape == (3,)
         assert np.all(s >= 0) and np.all(s <= 1)
 
     def test_strengths_uint8(self):
-        uid = topic_uid((0, 0))
+        uid = self.tree.loc_to_idx[(0,0)]
         idx = np.array([0, 1, 2])
         s = self.tree.strengths(uid, idx, as_float=False)
         assert s.dtype == np.uint8
@@ -256,16 +255,16 @@ class TestTopicDatabase:
     def test_topics_returns_topic_query(self):
         tq = self.db.q.from_docs([0]).nearby().topics(min_strength=0.5)
         assert isinstance(tq, TopicQuery)
-        assert len(tq.uids) > 0
+        assert len(tq.indices) > 0
 
     def test_theme_returns_topic_query(self):
         tq = self.db.q.from_docs([0]).nearby().theme()
         assert isinstance(tq, TopicQuery)
-        assert len(tq.uids) == 1
+        assert len(tq.indices) == 1
 
     def test_theme_uid_is_valid(self):
-        uid = self.db.q.from_docs([0]).nearby().theme().uids[0]
-        assert uid in self.sct.uid_to_loc
+        uid = self.db.q.from_docs([0]).nearby().theme().indices[0]
+        assert uid in self.sct.idx_to_loc
 
     def test_info_terminal(self):
         tq = self.db.q.topic(1, 0)
@@ -277,17 +276,17 @@ class TestTopicDatabase:
     def test_parents_chain(self):
         tq = self.db.q.topic(0, 0).parents()
         assert isinstance(tq, TopicQuery)
-        assert topic_uid((1, 0)) in tq.uids
+        assert self.sct.loc_to_idx[(1,0)] in tq.indices
 
     def test_children_chain(self):
         tq = self.db.q.topic(1, 0).children()
         assert isinstance(tq, TopicQuery)
-        assert topic_uid((0, 0)) in tq.uids
-        assert topic_uid((0, 1)) in tq.uids
+        assert self.sct.loc_to_idx[(0,0)] in tq.indices
+        assert self.sct.loc_to_idx[(0,1)] in tq.indices
 
     def test_join_chain(self):
-        tq = TopicQuery(self.db, [topic_uid((0, 0)), topic_uid((0, 1))]).least_upper_bound()
-        assert tq.uids[0] == topic_uid((1, 0))
+        tq = TopicQuery(self.db, [self.sct.loc_to_idx[(0,0)], self.sct.loc_to_idx[(0,1)]]).least_upper_bound()
+        assert tq.indices[0] == self.sct.loc_to_idx[(1,0)]
 
     def test_inside_chain(self):
         iq = self.db.q.topic(1, 0).inside(min_strength=0.0)
