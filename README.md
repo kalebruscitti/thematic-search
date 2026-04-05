@@ -50,7 +50,7 @@ topicdb = TopicDatabase(
     SoftClusterTree(cluster_layers, cluster_tree),
     embedding_vectors=embedding_vectors,
     reduced_vectors=reduced_vectors,        # optional
-    document_df=document_metadata,          # optional
+    sample_df=document_metadata,          # optional
     topic_df=topic_metadata,                # indexed by your node labels
     cluster_labels=cluster_labels,          # from convert_tree
 )
@@ -62,22 +62,22 @@ If you want to use `topicdb.q.search()`, you will also need to provide an `embed
 
 Queries are accessed via `topicdb.q` and are chainable. The full set of composable queries is given by the arrows in the schema diagram:
 
-![A commutative diagram explaining the queries in the database.](instance-category.png)
+![A diagram explaining the data migration queries in the database.](./docs/source/data_migrations.PNG)
 
 Some examples:
 
 ```python
 # Documents nearest to a query string in embedding space
-topicdb.q.search("Advancements in space technology").documents()
+topicdb.q.neighbours("Advancements in space technology").metadata()
 
 # Most specific topic covering those nearest neighbours
-topicdb.q.search("Advancements in space technology").theme().info()
+topicdb.q.neighbours("Advancements in space technology").theme().metadata()
 
 # Documents inside a named topic with at least 75% inclusion strength
-topicdb.q.topic_name("science").inside(min_strength=0.75).documents()
+topicdb.q.topic_name("science").samples(min_strength=0.75).metadata()
 
 # Chain queries: theme of documents inside the parent of a known topic
-topicdb.q.topic_name("physics").parents().inside().theme().info()
+topicdb.q.topic_name("physics").parents().samples().theme().metadata()
 ```
 
 ## Toponymy Integration
@@ -88,6 +88,6 @@ Thematic Search is designed to work out-of-the-box with topic models generated b
 from toponymy.serialization import TopicModel
 from thematic_search import TopicDatabase
 
-topic_model = TopicModel.from_toponymy(toponymy, document_df=my_document_metadata)
+topic_model = TopicModel.from_toponymy(toponymy, sample_df=my_document_metadata)
 topicdb = TopicDatabase.from_topic_model(topic_model)
 ```

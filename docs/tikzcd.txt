@@ -1,0 +1,25 @@
+
+
+Interdata Queries
+% https://q.uiver.app/#q=WzAsMyxbMiwwLCJcXG1hdGhybXtGdXp6eVF1ZXJ5fSJdLFswLDAsIlxcbWF0aHJte1NhbXBsZVF1ZXJ5fSJdLFs0LDAsIlxcbWF0aHJte1RvcGljUXVlcnl9Il0sWzAsMiwiXFx2ZXJifHRvcGljc3wiLDEseyJvZmZzZXQiOi0yfV0sWzAsMSwiXFx2ZXJifHNhbXBsZXN8IiwxLHsib2Zmc2V0IjoyfV0sWzEsMiwiXFx2ZXJifHRoZW1lfCIsMix7ImN1cnZlIjozfV0sWzEsMCwiXFx2ZXJifHRvX2Z1enp5fCIsMSx7Im9mZnNldCI6Mn1dLFsyLDAsIlxcdmVyYnx0b19mdXp6eXwiLDEseyJvZmZzZXQiOi0yfV1d
+\[\begin{tikzcd}[ampersand replacement=\&]
+	{\mathrm{SampleQuery}} \&\& {\mathrm{FuzzyQuery}} \&\& {\mathrm{TopicQuery}}
+	\arrow["{\verb|to_fuzzy|}"{description}, shift right=2, from=1-1, to=1-3]
+	\arrow["{\verb|theme|}"', curve={height=18pt}, from=1-1, to=1-5]
+	\arrow["{\verb|samples|}"{description}, shift right=2, from=1-3, to=1-1]
+	\arrow["{\verb|topics|}"{description}, shift left=2, from=1-3, to=1-5]
+	\arrow["{\verb|to_fuzzy|}"{description}, shift left=2, from=1-5, to=1-3]
+\end{tikzcd}\]
+
+Query Entry Points
+% https://q.uiver.app/#q=WzAsNCxbMywyLCJcXHZlcmJ8VG9waWNRdWVyeXwiXSxbMywxLCJcXHZlcmJ8RnV6enlRdWVyeXwiXSxbMywwLCJcXHZlcmJ8U2FtcGxlUXVlcnl8Il0sWzAsMSwiXFx2ZXJifFRvcGljRGF0YWJhc2UucXwiXSxbMywxLCJcXHZlcmJ8dG9waWNzX3doZXJlfCIsMSx7Im9mZnNldCI6Mn1dLFszLDEsIlxcdmVyYnxzYW1wbGVzX3doZXJlfCIsMSx7Im9mZnNldCI6LTJ9XSxbMywwLCJcXHZlcmJ8dG9waWN8XFxcXFxcdmVyYnx0b3BpY19uYW1lfFxcXFxcXHZlcmJ8dG9waWNfaWR4fCIsMSx7ImN1cnZlIjoyfV0sWzMsMiwiXFx2ZXJifHNhbXBsZXN8IiwxLHsiY3VydmUiOi0xfV0sWzMsMiwiXFx2ZXJifG5laWdoYm91cnN8IiwxLHsiY3VydmUiOi0zfV1d
+\[\begin{tikzcd}[ampersand replacement=\&]
+	\&\&\& {\verb|SampleQuery|} \\
+	{\verb|TopicDatabase.q|} \&\&\& {\verb|FuzzyQuery|} \\
+	\&\&\& {\verb|TopicQuery|}
+	\arrow["{\verb|samples|}"{description}, curve={height=-6pt}, from=2-1, to=1-4]
+	\arrow["{\verb|neighbours|}"{description}, curve={height=-18pt}, from=2-1, to=1-4]
+	\arrow["{\verb|topics_where|}"{description}, shift right=2, from=2-1, to=2-4]
+	\arrow["{\verb|samples_where|}"{description}, shift left=2, from=2-1, to=2-4]
+	\arrow["\begin{array}{c} \verb|topic|\\\verb|topic_name|\\\verb|topic_idx| \end{array}"{description}, curve={height=12pt}, from=2-1, to=3-4]
+\end{tikzcd}\]

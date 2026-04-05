@@ -64,7 +64,7 @@ class FuzzyQuery:
             self.db.topic_df.index.to_numpy(),
             query
         ))
-        return FuzzyQuery(self.db, self.indexed_colimit(indices))
+        return FuzzyQuery(self.db, self._indexed_colimit(indices))
 
     def samples(self, threshold: float=1.0)->"SampleQuery":
         """
@@ -134,7 +134,7 @@ class SampleQuery:
         indices = self.db._nearby(vector, k)
         return SampleQuery(self.db, indices)
 
-    def topics(self, min_strength: float = 1, logic: str = "OR") -> "TopicQuery":
+    def topics(self, threshold: float = 1, logic: str = "OR") -> "TopicQuery":
         """
         Return the topics containing these document indices.
         Uses weighted nearest neighbour aggregation over soft membership vectors.
@@ -147,7 +147,7 @@ class SampleQuery:
         """
         topics = self.db._topics(
             self.indices,
-            min_strength=min_strength,
+            threshold=threshold,
             logic=logic
         )
         return TopicQuery(self.db, topics)
@@ -237,20 +237,20 @@ class TopicQuery:
 
     def samples(
         self,
-        min_strength: float = 1.0,
+        threshold: float = 1.0,
     ) -> "SampleQuery":
         """
         Return document indices inside these topics, combined with OR logic.
 
         Parameters
         ----------  
-        min_strength : float, optional (default=1.0)
+        threshold : float, optional (default=1.0)
             Minimum inclusion strength in [0, 1].
         """
         indices = set()
         for idx in self.indices:
             indices.update(
-                self.db.soft_cluster_tree.inside(idx, min_strength=min_strength).tolist()
+                self.db.soft_cluster_tree.inside(idx, threshold=threshold).tolist()
             )
         return SampleQuery(self.db, np.array(sorted(indices)))
 
@@ -384,7 +384,7 @@ class RootQuery:
         fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
         return fq.topics_where(query)
 
-    def index_expr(self, expr: IndexExpr, min_strength: float=1.0) -> SampleQuery:
+    def index_expr(self, expr: IndexExpr, threshold: float=1.0) -> SampleQuery:
         """
         Initialize an SampleQuery with the indices inside an IndexExpr 
 
@@ -392,8 +392,8 @@ class RootQuery:
         ----------
         expr: IndexExpr
             The expression to evaluate 
-        min_strength: float (optional default=1.0)
+        threshold: float (optional default=1.0)
             Minimum inclusion strength in [0, 1].
         """
-        indices = self.db.soft_cluster_tree.inside(expr, min_strength=min_strength)
+        indices = self.db.soft_cluster_tree.inside(expr, threshold=threshold)
         return SampleQuery(self.db, indices)
