@@ -38,7 +38,7 @@ def save_topic_database(topicdb, path):
         matrices_dir.mkdir()
 
         # --- DataFrames ---
-        topicdb.document_df.to_parquet(root / "document_df.parquet")
+        topicdb.sample_df.to_parquet(root / "document_df.parquet")
         topic_df = deepcopy(topicdb.topic_df)
         topic_df["uid"] = [topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index]
         topic_df.to_parquet(root / "topic_df.parquet")
@@ -117,7 +117,7 @@ def load_topic_database(path, SoftClusterTree, TopicDatabase):
         has_reduced = metadata["has_reduced"]
 
         # --- DataFrames ---
-        document_df = pd.read_parquet(root / "document_df.parquet")
+        sample_df = pd.read_parquet(root / "document_df.parquet")
         topic_df = pd.read_parquet(root / "topic_df.parquet")
         topic_df['index'] = topic_df['uid'].map(uid_to_ints)
         topic_df.drop(columns='uid', inplace=True)
@@ -155,7 +155,7 @@ def load_topic_database(path, SoftClusterTree, TopicDatabase):
             soft_cluster_tree=soft_cluster_tree,
             embedding_vectors=embedding_vectors,
             reduced_vectors=reduced_vectors,
-            document_df=document_df,
+            sample_df=sample_df,
             topic_df=topic_df,
             embedding_model=None,
         )
@@ -172,7 +172,7 @@ def save_topic_database_lance(topicdb, path):
     Layout
     ------
     <path>/
-      documents.lance   one row per document; columns = document_df columns
+      documents.lance   one row per document; columns = sample_df columns
                         + 'embedding' (fixed-size vector)
                         + 'reduced_embedding' (fixed-size vector, if present)
       topics.lance      one row per topic; columns = topic_df columns + 'uid'
@@ -199,14 +199,14 @@ def save_topic_database_lance(topicdb, path):
     path.mkdir(parents=True)
 
     # --- documents.lance ---
-    doc_dict = {col: topicdb.document_df[col].tolist()
-                for col in topicdb.document_df.columns}
+    doc_dict = {col: topicdb.sample_df[col].tolist()
+                for col in topicdb.sample_df.columns}
 
     emb_dim = topicdb.embedding_vectors.shape[1]
     doc_dict["embedding"] = topicdb.embedding_vectors.tolist()
     schema_fields = [
-        *[pa.field(col, _pandas_col_to_arrow(topicdb.document_df[col]))
-          for col in topicdb.document_df.columns],
+        *[pa.field(col, _pandas_col_to_arrow(topicdb.sample_df[col]))
+          for col in topicdb.sample_df.columns],
         pa.field("embedding", pa.list_(pa.float32(), emb_dim)),
     ]
 
@@ -313,7 +313,7 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
     reduced_vectors = None
     if has_reduced:
         reduced_vectors = np.array(doc_table.pop("reduced_embedding"), dtype=np.float32)
-    document_df = pd.DataFrame(doc_table)
+    sample_df = pd.DataFrame(doc_table)
 
     # --- topics ---
     topic_dict = lance.dataset(str(path / "topics.lance")).to_table().to_pydict()
@@ -328,7 +328,7 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
     rows_arr     = np.array(coo_dict["row_idx"],  dtype=np.int32)
     cols_arr     = np.array(coo_dict["col_idx"],  dtype=np.int16)
     vals_arr     = np.array(coo_dict["value"],    dtype=np.uint8)  # safe: values are 0-255
-    n_docs       = len(document_df)
+    n_docs       = len(sample_df)
 
     matrices = []
     for layer_idx in range(n_layers):
@@ -350,7 +350,7 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
         soft_cluster_tree=soft_cluster_tree,
         embedding_vectors=embedding_vectors,
         reduced_vectors=reduced_vectors,
-        document_df=document_df,
+        sample_df=sample_df,
         topic_df=topic_df,
         embedding_model=None,
     )

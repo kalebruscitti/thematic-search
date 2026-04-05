@@ -80,7 +80,7 @@ def _make_topic_database(with_reduced: bool = True) -> TopicDatabase:
         soft_cluster_tree=soft_cluster_tree,
         embedding_vectors=embedding_vectors,
         reduced_vectors=reduced_vectors,
-        document_df=document_df,
+        sample_df=document_df,
         embedding_model=None,
     )
 
@@ -134,8 +134,8 @@ def _assert_round_trip(original: TopicDatabase, loaded: TopicDatabase):
 
     # --- document metadata ---
     pd.testing.assert_frame_equal(
-        original.document_df.reset_index(drop=True),
-        loaded.document_df.reset_index(drop=True),
+        original.sample_df.reset_index(drop=True),
+        loaded.sample_df.reset_index(drop=True),
         check_like=True,
     )
 
@@ -147,8 +147,8 @@ def _assert_round_trip(original: TopicDatabase, loaded: TopicDatabase):
 
 def _assert_query_works(db: TopicDatabase):
     """Smoke-test a basic query chain on a loaded database."""
-    random_indices = np.random.default_rng().choice(len(db.document_df),size=5)
-    result = db.q.from_docs(random_indices).topics().metadata()
+    random_indices = np.random.default_rng().choice(len(db.sample_df),size=5)
+    result = db.q.samples(random_indices).topics().metadata()
     assert isinstance(result, pd.DataFrame)
 
 
@@ -216,7 +216,7 @@ class TestZipBackend:
         topicdb = TopicDatabase.from_file("20ng-topicdb.tm.zip")
         q1=topicdb.q.neighbours("Recent advancements in space exploration").neighbours().theme().metadata()
         assert q1.name.values[0] == "sci.space"
-        q2=topicdb.q.from_docs([0,7,8,33,18132]).theme().metadata()
+        q2=topicdb.q.samples([0,7,8,33,18132]).theme().metadata()
         assert q2.name.values[0] == "rec.sport"
 
 # =============================================================================

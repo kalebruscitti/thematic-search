@@ -30,7 +30,7 @@ class FuzzyQuery:
         Parameters
         ----------
         query : str
-            A query string to pass to document_df.query()
+            A query string to pass to sample_df.query()
         """
         indices = self.db._docs_where(
             np.arange(self.matrix.shape[0]),
@@ -235,7 +235,7 @@ class TopicQuery:
         """Return the least upper bound (lowest common ancestor) of these topics."""
         return TopicQuery(self.db, self.db.soft_cluster_tree.join(self.indices))
 
-    def inside(
+    def samples(
         self,
         min_strength: float = 1.0,
     ) -> "SampleQuery":
@@ -243,7 +243,7 @@ class TopicQuery:
         Return document indices inside these topics, combined with OR logic.
 
         Parameters
-        ----------
+        ----------  
         min_strength : float, optional (default=1.0)
             Minimum inclusion strength in [0, 1].
         """
@@ -304,7 +304,7 @@ class RootQuery:
         indices = self.db._nearby(vec, k=k)
         return SampleQuery(self.db, indices)
     
-    def from_docs(self, indices: Union[List[int], np.ndarray]) -> SampleQuery:
+    def samples(self, indices: Union[List[int], np.ndarray]) -> SampleQuery:
         """
         Use a set of document indices as the query entry point.
         Their embedding vectors are averaged to form a single query vector.

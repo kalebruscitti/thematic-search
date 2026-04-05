@@ -31,7 +31,7 @@ class TopicDatabase:
         The embedding vectors of the documents, shape (n_docs, n_features).
     reduced_vectors : np.ndarray
         The reduced vectors of the documents, shape (n_docs, n_reduced_features).
-    document_df : pd.DataFrame, optional
+    sample_df : pd.DataFrame, optional
         Document metadata. If None, a minimal DataFrame with just indices is created.
     topic_df : pd.DataFrame, optional
         Topic metadata. Must have an 'index' column as primary key if provided.
@@ -53,7 +53,7 @@ class TopicDatabase:
         soft_cluster_tree: SoftClusterTree,
         embedding_vectors: np.ndarray,
         reduced_vectors: np.ndarray = None,
-        document_df: pd.DataFrame = None,
+        sample_df: pd.DataFrame = None,
         topic_df: pd.DataFrame = None,
         cluster_labels: dict = None,
         embedding_model=None,
@@ -70,12 +70,12 @@ class TopicDatabase:
         self.nn_index = pynndescent.NNDescent(embedding_vectors)
 
         # Document metadata
-        if document_df is None:
-            self.document_df = pd.DataFrame(
+        if sample_df is None:
+            self.sample_df = pd.DataFrame(
                 {"idx": range(len(embedding_vectors))}
             )
         else:
-            self.document_df = document_df.reset_index(drop=True)
+            self.sample_df = sample_df.reset_index(drop=True)
 
         # Topic metadata
         if topic_df is None:
@@ -138,7 +138,7 @@ class TopicDatabase:
 
     def _documents(self, indices: np.ndarray) -> pd.DataFrame:
         """Return document metadata rows for a set of indices."""
-        return self.document_df.iloc[indices]
+        return self.sample_df.iloc[indices]
 
     def _info(self, indices: list) -> pd.DataFrame:
         """Return topic metadata rows for a set of indices."""
@@ -146,7 +146,7 @@ class TopicDatabase:
 
     def _docs_where(self, indices: np.ndarray, query: str) -> np.ndarray:
         """Filter document indices by metadata column values."""
-        df = self.document_df.iloc[indices]
+        df = self.sample_df.iloc[indices]
         result = df.query(query)
         return result.index.to_numpy()
     
@@ -282,6 +282,6 @@ class TopicDatabase:
             ),
             embedding_vectors = topic_model.embedding_vectors,
             reduced_vectors = topic_model.reduced_vectors,
-            document_df = topic_model.document_df,
+            sample_df = topic_model.sample_df,
             topic_df = topic_model.topic_df.set_index('idx'),
         )
