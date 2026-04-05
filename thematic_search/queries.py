@@ -11,6 +11,14 @@ class FuzzyQuery:
         self.db = db
         self.matrix = matrix
 
+    def __repr__(self):
+        n_samples = np.max(self.matrix, axis=1).nonzero()[0].size
+        n_topics = np.max(self.matrix, axis=0).nonzero()[0].size
+        return f"FuzzyQuery({n_samples} samples, {n_topics} topics)"
+
+    def unwrap(self) -> np.ndarray:
+        return self.matrix
+
     def samples_where(self, query: str)->"FuzzyQuery":
         """
         Apply a sample metadata filter to the query.

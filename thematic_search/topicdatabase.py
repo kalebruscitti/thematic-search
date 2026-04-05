@@ -237,6 +237,21 @@ class TopicDatabase:
     def tree(self):
         """ Return the database tree as a dictionary. (self.soft_cluster_tree.children_map) """
         return self.soft_cluster_tree.children_map
+    
+    @property
+    def cluster_matrix(self):
+        """ Return the Fuzzy inclusion cluster matrix. """
+        return self.soft_cluster_tree.cluster_matrix
+    
+    def __repr__(self):
+        n_topics = self.soft_cluster_tree.n_topics
+        n_docs = self.soft_cluster_tree.n_docs
+        n_layers = self.soft_cluster_tree.n_layers
+        string = "TopicDatabase("
+        string += f"{n_docs} samples, {n_topics} topics, "
+        string += f"{n_layers} layers)"
+        return string
+
 
     def to_file(self, path: str):
         """ Save a TopicDatbase to a `tm.zip` file. """
