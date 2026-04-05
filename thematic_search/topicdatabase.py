@@ -13,6 +13,7 @@ from .serialization import (
 )
 from .queries import *
 
+
 class TopicDatabase:
     """
     A hierarchical soft-clustering database for thematic search.
@@ -71,9 +72,7 @@ class TopicDatabase:
 
         # Document metadata
         if sample_df is None:
-            self.sample_df = pd.DataFrame(
-                {"idx": range(len(embedding_vectors))}
-            )
+            self.sample_df = pd.DataFrame({"idx": range(len(embedding_vectors))})
         else:
             self.sample_df = sample_df.reset_index(drop=True)
 
@@ -105,22 +104,27 @@ class TopicDatabase:
         """Build a minimal topic metadata DataFrame from the SoftClusterTree."""
         rows = []
         for idx, (layer, cluster_number) in self.soft_cluster_tree.idx_to_loc.items():
-            rows.append({
-                "index": idx,
-                "layer": layer,
-                "cluster_number": cluster_number,
-            })
+            rows.append(
+                {
+                    "index": idx,
+                    "layer": layer,
+                    "cluster_number": cluster_number,
+                }
+            )
         return pd.DataFrame(rows).set_index("index")
 
     @property
     def q(self) -> RootQuery:
         """Entry point for all queries."""
         return RootQuery(self)
-        
+
     @property
     def topics(self):
         try:
-            return [self.leaf(idx, self.topic_df.loc[idx].name) for idx in self.idx_to_loc.keys()]
+            return [
+                self.leaf(idx, self.topic_df.loc[idx].name)
+                for idx in self.idx_to_loc.keys()
+            ]
         except:
             return self.soft_cluster_tree.topics
 
@@ -149,14 +153,16 @@ class TopicDatabase:
         df = self.sample_df.iloc[indices]
         result = df.query(query)
         return result.index.to_numpy()
-    
+
     def _topics_where(self, indices, query: str) -> list:
         """Filter topics by metadata column values."""
         df = self.topic_df.loc[indices]
         result = df.query(query)
         return result.index.to_list()
 
-    def _topics(self, indices: np.ndarray, threshold: float = 1, logic: str = "OR") -> list:
+    def _topics(
+        self, indices: np.ndarray, threshold: float = 1, logic: str = "OR"
+    ) -> list:
         """
         Return the topics containing a set of document indices.
         Uses the finest (lowest layer) topic for each document.
@@ -166,7 +172,7 @@ class TopicDatabase:
             doc_topics = set()
             for layer in range(self.soft_cluster_tree.n_layers):
                 col_vec = self.soft_cluster_tree.layers[layer].getrow(i)
-                nonzero_cols = (col_vec>=255*threshold).nonzero()[1]
+                nonzero_cols = (col_vec >= 255 * threshold).nonzero()[1]
                 if len(nonzero_cols) > 0:
                     for col in nonzero_cols:
                         doc_topics.add(self.soft_cluster_tree.loc_to_idx[(layer, col)])
@@ -223,7 +229,9 @@ class TopicDatabase:
                 continue
 
             # Layer score: prefer lower layer (more specific) topics
-            layer_score = ((tree.n_layers+1) - tree.idx_to_loc[topic_idx][0])/(tree.n_layers+1)
+            layer_score = ((tree.n_layers + 1) - tree.idx_to_loc[topic_idx][0]) / (
+                tree.n_layers + 1
+            )
 
             score = coverage * layer_score
 
@@ -232,17 +240,17 @@ class TopicDatabase:
                 best_idx = topic_idx
 
         return best_idx if best_idx is not None else tree.root_idx
-    
-    @property 
+
+    @property
     def tree(self):
-        """ Return the database tree as a dictionary. (self.soft_cluster_tree.children_map) """
+        """Return the database tree as a dictionary. (self.soft_cluster_tree.children_map)"""
         return self.soft_cluster_tree.children_map
-    
+
     @property
     def cluster_matrix(self):
-        """ Return the Fuzzy inclusion cluster matrix. """
+        """Return the Fuzzy inclusion cluster matrix."""
         return self.soft_cluster_tree.cluster_matrix
-    
+
     def __repr__(self):
         n_topics = self.soft_cluster_tree.n_topics
         n_docs = self.soft_cluster_tree.n_docs
@@ -252,36 +260,35 @@ class TopicDatabase:
         string += f"{n_layers} layers)"
         return string
 
-
     def to_file(self, path: str):
-        """ Save a TopicDatbase to a `tm.zip` file. """
+        """Save a TopicDatbase to a `tm.zip` file."""
         save_topic_database(self, path)
 
     def to_lance(self, path: str):
-        """ Save a TopicDatabase to a LanceDB folder. """
+        """Save a TopicDatabase to a LanceDB folder."""
         save_topic_database_lance(self, path)
 
     @classmethod
     def from_file(cls, path: str):
-        """ Load a TopicDatabase from a `tm.zip` file. """
+        """Load a TopicDatabase from a `tm.zip` file."""
         return load_topic_database(path, SoftClusterTree, cls)
-    
+
     @classmethod
     def from_lance(cls, path: str):
-        """ Load a TopicDatabase from a LanceDB folder. """
+        """Load a TopicDatabase from a LanceDB folder."""
         return load_topic_database_lance(path, SoftClusterTree, cls)
-    
+
     @classmethod
     def from_topic_model(cls, topic_model):
-        """ Integration with Toponymy's TopicModel class. """
+        """Integration with Toponymy's TopicModel class."""
         return cls(
             SoftClusterTree(
                 topic_model.cluster_layers,
                 topic_model.cluster_tree,
-                sparsity_threshold = 0.01,
+                sparsity_threshold=0.01,
             ),
-            embedding_vectors = topic_model.embedding_vectors,
-            reduced_vectors = topic_model.reduced_vectors,
-            sample_df = topic_model.sample_df,
-            topic_df = topic_model.topic_df.set_index('idx'),
+            embedding_vectors=topic_model.embedding_vectors,
+            reduced_vectors=topic_model.reduced_vectors,
+            sample_df=topic_model.sample_df,
+            topic_df=topic_model.topic_df.set_index("idx"),
         )

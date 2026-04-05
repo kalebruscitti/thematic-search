@@ -7,6 +7,7 @@ from .utilities import *
 
 # =================== Index Expressions ===================
 
+
 class IndexExpr:
     """
     Base class for symbolic cluster expressions.
@@ -19,6 +20,7 @@ class IndexExpr:
     - ~a     evaluates to 1 where strength == 0, else 0  (Heyting negation)
     - ~~a    evaluates to 1 where strength > 0, else 0   (double negation)
     """
+
     def __and__(self, other):
         return IndexAnd(self, other)
 
@@ -34,7 +36,8 @@ class IndexExpr:
 
 class Cluster(IndexExpr):
     """A single cluster node identified by its index."""
-    def __init__(self, idx: int, name: str=None):
+
+    def __init__(self, idx: int, name: str = None):
         self.idx = idx
         self.name = name
 
@@ -47,6 +50,7 @@ class Cluster(IndexExpr):
 
 class IndexAnd(IndexExpr):
     """Conjunction (meet) of two cluster expressions: elementwise min."""
+
     def __init__(self, left: IndexExpr, right: IndexExpr):
         self.left = left
         self.right = right
@@ -57,6 +61,7 @@ class IndexAnd(IndexExpr):
 
 class IndexOr(IndexExpr):
     """Disjunction (join) of two cluster expressions: elementwise max."""
+
     def __init__(self, left: IndexExpr, right: IndexExpr):
         self.left = left
         self.right = right
@@ -71,13 +76,16 @@ class IndexNot(IndexExpr):
     ~a  = 255 where strength == 0, else 0
     ~~a = 255 where strength > 0,  else 0
     """
+
     def __init__(self, operand: IndexExpr):
         self.operand = operand
 
     def __repr__(self):
         return f"~{self.operand}"
 
+
 # =================== Soft Cluster Tree ===================
+
 
 class SoftClusterTree:
     """
@@ -117,8 +125,8 @@ class SoftClusterTree:
 
         self._validate(cluster_matrices, cluster_tree)
 
-        self.idx_to_loc = {}   # idx -> (layer, col_index)
-        self.loc_to_idx = {}   # (layer, col_index) -> idx
+        self.idx_to_loc = {}  # idx -> (layer, col_index)
+        self.loc_to_idx = {}  # (layer, col_index) -> idx
         idx = 0
         for l, matrix in enumerate(cluster_matrices):
             for j in range(matrix.shape[1]):
@@ -126,23 +134,23 @@ class SoftClusterTree:
                 self.loc_to_idx[(l, j)] = idx
                 idx += 1
         # don't forget the root node.
-        self.loc_to_idx[(l+1, 0)] = idx
-        self.idx_to_loc[idx] = [(l+1, 0)]
-        self.n_topics = idx+1
+        self.loc_to_idx[(l + 1, 0)] = idx
+        self.idx_to_loc[idx] = [(l + 1, 0)]
+        self.n_topics = idx + 1
 
         self.layers = []
         for m in cluster_matrices:
             if scipy.sparse.issparse(m):
-                warnings.warn("You passed sparse matrices," \
-                " SoftClusterTree is assuming they are ranged in [0,255]")
+                warnings.warn(
+                    "You passed sparse matrices,"
+                    " SoftClusterTree is assuming they are ranged in [0,255]"
+                )
                 self.layers.append(m)
             else:
-                self.layers.append(
-                    self._sparsify(m, sparsity_threshold)
-                )
+                self.layers.append(self._sparsify(m, sparsity_threshold))
 
         self.children_map = {}  # idx -> list of child indices
-        self.parent_map = {}    # idx -> list of parent indices
+        self.parent_map = {}  # idx -> list of parent indices
         for node, children in cluster_tree.items():
             node_idx = self.loc_to_idx[node]
             child_indices = [self.loc_to_idx[c] for c in children]
@@ -152,8 +160,14 @@ class SoftClusterTree:
                 self.parent_map[child_idx].append(node_idx)
 
         # Identify the root: the unique node in cluster_tree with no parents
-        all_children = {self.loc_to_idx[c] for children in cluster_tree.values() for c in children}
-        roots = [self.loc_to_idx[n] for n in cluster_tree if self.loc_to_idx[n] not in all_children]
+        all_children = {
+            self.loc_to_idx[c] for children in cluster_tree.values() for c in children
+        }
+        roots = [
+            self.loc_to_idx[n]
+            for n in cluster_tree
+            if self.loc_to_idx[n] not in all_children
+        ]
         if len(roots) != 1:
             raise ValueError(
                 f"cluster_tree must have exactly one root (a node with no parents), "
@@ -162,20 +176,18 @@ class SoftClusterTree:
         self.root_idx = roots[0]
         self.idx_to_loc[self.root_idx] = (self.n_layers, 0)
 
-        cluster_matrix = np.zeros(
-            (self.n_docs, self.n_topics), dtype=np.uint8
-        )
+        cluster_matrix = np.zeros((self.n_docs, self.n_topics), dtype=np.uint8)
         for col_idx in range(self.n_topics):
             layer, layer_idx = self.idx_to_loc[col_idx]
             if layer < self.n_layers:
-                layer_matrix =  (
+                layer_matrix = (
                     self.to_float(cluster_matrices[layer].toarray())
                     if scipy.sparse.issparse(cluster_matrices[layer])
                     else np.asarray(cluster_matrices[layer])
                 )
-                cluster_matrix[:,col_idx] = layer_matrix[:,layer_idx]
+                cluster_matrix[:, col_idx] = layer_matrix[:, layer_idx]
             else:
-                cluster_matrix[:,col_idx] = 1
+                cluster_matrix[:, col_idx] = 1
         self.cluster_matrix = self._sparsify(cluster_matrix, sparsity_threshold)
         # Compute transitive closure matrix of the tree
         # This needs to be stored for quick indexed colimits
@@ -183,10 +195,9 @@ class SoftClusterTree:
         for i, children in self.children_map.items():
             for j in children:
                 A[i, j] = True
-        self.adjacency_closure = (floyd_warshall(
-            scipy.sparse.csr_matrix(A.T)
-        )<np.inf).astype(int)  
-
+        self.adjacency_closure = (
+            floyd_warshall(scipy.sparse.csr_matrix(A.T)) < np.inf
+        ).astype(int)
 
     # =================== Utilities ===================
 
@@ -200,7 +211,9 @@ class SoftClusterTree:
         """Convert float inclusion strength in [0, 1] to uint8."""
         return np.round(float_value * 255).astype(np.uint8)
 
-    def _sparsify(self, dense_matrix: np.ndarray, threshold: float) -> scipy.sparse.csr_matrix:
+    def _sparsify(
+        self, dense_matrix: np.ndarray, threshold: float
+    ) -> scipy.sparse.csr_matrix:
         """Quantize a float matrix to uint8 and sparsify."""
         quantized = np.round(dense_matrix * 255).astype(np.uint8)
         quantized[quantized <= self.to_int(threshold)] = 0
@@ -216,7 +229,7 @@ class SoftClusterTree:
                 )
                 continue
             if layer == self.n_layers:
-                # The top layer contains only the root, so the rest of 
+                # The top layer contains only the root, so the rest of
                 # the validation steps don't apply.
                 continue
             n_clusters = cluster_matrices[layer].shape[1]
@@ -225,7 +238,7 @@ class SoftClusterTree:
                     f"Tree node ({layer}, {cluster_number}) references cluster "
                     f"{cluster_number} but layer {layer} only has {n_clusters} clusters."
                 )
-            for (cl, cn) in children:
+            for cl, cn in children:
                 if cl >= self.n_layers:
                     warnings.warn(
                         f"Child node ({cl}, {cn}) references layer {cl} "
@@ -247,7 +260,7 @@ class SoftClusterTree:
         layer, col = self.idx_to_loc[idx]
         if layer == self.n_layers:
             # root node.
-            return np.full((self.n_docs,1), 255, dtype=np.uint8)
+            return np.full((self.n_docs, 1), 255, dtype=np.uint8)
         else:
             return np.array(self.layers[layer].getcol(col).toarray()).flatten()
 
@@ -381,7 +394,7 @@ class SoftClusterTree:
         min_layer = min(self.idx_to_loc[u][0] for u in common)
         return [u for u in common if self.idx_to_loc[u][0] == min_layer]
 
-    #=== API/Utilities ===#
+    # === API/Utilities ===#
 
     def strengths(
         self,
@@ -440,8 +453,5 @@ class SoftClusterTree:
 
     @property
     def cluster_matrices(self):
-        """Reconstruct the dense cluster matrices for saving purposes. """
+        """Reconstruct the dense cluster matrices for saving purposes."""
         return [matrix.todense() for matrix in self.layers]
-    
-
-    

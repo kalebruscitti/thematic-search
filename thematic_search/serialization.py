@@ -11,13 +11,13 @@ import numpy as np
 
 from .utilities import uid_to_ints, topic_uid
 
-
 _SERIAL_VERSION = "0.1"
 
 
 # =============================================================================
 # Zip backend
 # =============================================================================
+
 
 def save_topic_database(topicdb, path):
     """
@@ -40,14 +40,18 @@ def save_topic_database(topicdb, path):
         # --- DataFrames ---
         topicdb.sample_df.to_parquet(root / "document_df.parquet")
         topic_df = deepcopy(topicdb.topic_df)
-        topic_df["uid"] = [topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index]
+        topic_df["uid"] = [
+            topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index
+        ]
         topic_df.to_parquet(root / "topic_df.parquet")
 
         # --- Vectors ---
         np.save(root / "embedding_vectors.npy", topicdb.embedding_vectors)
         has_reduced = False
         if topicdb.reduced_vectors is not None:
-            np.save(root / "reduced_vectors.npy", topicdb.reduced_vectors)  # bugfix: was saving embedding_vectors to cwd
+            np.save(
+                root / "reduced_vectors.npy", topicdb.reduced_vectors
+            )  # bugfix: was saving embedding_vectors to cwd
             has_reduced = True
 
         # --- Sparse cluster matrices ---
@@ -56,11 +60,11 @@ def save_topic_database(topicdb, path):
 
         # --- Cluster tree topology ---
         idx_to_uid = {
-            i:topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i])
+            i: topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i])
             for i in range(topicdb.soft_cluster_tree.n_topics)
         }
         uid_tree = {
-            idx_to_uid[k]:[idx_to_uid[c] for c in children] 
+            idx_to_uid[k]: [idx_to_uid[c] for c in children]
             for k, children in topicdb.soft_cluster_tree.children_map.items()
         }
         with open(root / "cluster_tree.json", "w") as f:
@@ -119,15 +123,17 @@ def load_topic_database(path, SoftClusterTree, TopicDatabase):
         # --- DataFrames ---
         sample_df = pd.read_parquet(root / "document_df.parquet")
         topic_df = pd.read_parquet(root / "topic_df.parquet")
-        topic_df['index'] = topic_df['uid'].map(uid_to_ints)
-        topic_df.drop(columns='uid', inplace=True)
-        topic_df.set_index('index', drop=True, inplace=True)
+        topic_df["index"] = topic_df["uid"].map(uid_to_ints)
+        topic_df.drop(columns="uid", inplace=True)
+        topic_df.set_index("index", drop=True, inplace=True)
 
         # --- Vectors ---
         embedding_vectors = np.load(root / "embedding_vectors.npy")
         reduced_vectors = None
         if has_reduced:
-            reduced_vectors = np.load(root / "reduced_vectors.npy")  # bugfix: was loading from cwd
+            reduced_vectors = np.load(
+                root / "reduced_vectors.npy"
+            )  # bugfix: was loading from cwd
 
         # --- Sparse cluster matrices ---
         matrices_dir = root / "cluster_matrices"
@@ -165,6 +171,7 @@ def load_topic_database(path, SoftClusterTree, TopicDatabase):
 # Lance backend
 # =============================================================================
 
+
 def save_topic_database_lance(topicdb, path):
     """
     Save a TopicDatabase to a directory of Lance tables.
@@ -199,14 +206,17 @@ def save_topic_database_lance(topicdb, path):
     path.mkdir(parents=True)
 
     # --- documents.lance ---
-    doc_dict = {col: topicdb.sample_df[col].tolist()
-                for col in topicdb.sample_df.columns}
+    doc_dict = {
+        col: topicdb.sample_df[col].tolist() for col in topicdb.sample_df.columns
+    }
 
     emb_dim = topicdb.embedding_vectors.shape[1]
     doc_dict["embedding"] = topicdb.embedding_vectors.tolist()
     schema_fields = [
-        *[pa.field(col, _pandas_col_to_arrow(topicdb.sample_df[col]))
-          for col in topicdb.sample_df.columns],
+        *[
+            pa.field(col, _pandas_col_to_arrow(topicdb.sample_df[col]))
+            for col in topicdb.sample_df.columns
+        ],
         pa.field("embedding", pa.list_(pa.float32(), emb_dim)),
     ]
 
@@ -224,7 +234,9 @@ def save_topic_database_lance(topicdb, path):
 
     # --- topics.lance ---
     topic_df = deepcopy(topicdb.topic_df)
-    topic_df["uid"] = [topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index]
+    topic_df["uid"] = [
+        topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i]) for i in topic_df.index
+    ]
     topic_dict = {col: topic_df[col].tolist() for col in topic_df.columns}
     topic_table = pa.table(topic_dict)
     lance.write_dataset(topic_table, str(path / "topics.lance"))
@@ -241,32 +253,38 @@ def save_topic_database_lance(topicdb, path):
         coo_cols.append(coo.col.astype(np.int16))
         coo_vals.append(coo.data.astype(np.int32))
 
-    clusters_table = pa.table({
-        "layer":   pa.array(np.concatenate(coo_layers), type=pa.int16()),
-        "row_idx": pa.array(np.concatenate(coo_rows),   type=pa.int32()),
-        "col_idx": pa.array(np.concatenate(coo_cols),   type=pa.int16()),
-        "value":   pa.array(np.concatenate(coo_vals),   type=pa.int32()),
-    })
+    clusters_table = pa.table(
+        {
+            "layer": pa.array(np.concatenate(coo_layers), type=pa.int16()),
+            "row_idx": pa.array(np.concatenate(coo_rows), type=pa.int32()),
+            "col_idx": pa.array(np.concatenate(coo_cols), type=pa.int16()),
+            "value": pa.array(np.concatenate(coo_vals), type=pa.int32()),
+        }
+    )
     lance.write_dataset(clusters_table, str(path / "clusters.lance"))
 
     idx_to_uid = {
-        i:topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i])
+        i: topic_uid(topicdb.soft_cluster_tree.idx_to_loc[i])
         for i in range(topicdb.soft_cluster_tree.n_topics)
     }
     uid_tree = {
-        idx_to_uid[k]:[idx_to_uid[c] for c in children] 
+        idx_to_uid[k]: [idx_to_uid[c] for c in children]
         for k, children in topicdb.soft_cluster_tree.children_map.items()
     }
     # --- config.lance ---
-    config_table = pa.table({
-        "serial_version": pa.array([_SERIAL_VERSION],  type=pa.string()),
-        "n_layers":       pa.array([len(topicdb.soft_cluster_tree.layers)], type=pa.int32()),
-        "has_reduced":    pa.array([has_reduced],       type=pa.bool_()),
-        "cluster_tree":   pa.array(
-            [json.dumps(uid_tree)],
-            type=pa.string(),
-        ),
-    })
+    config_table = pa.table(
+        {
+            "serial_version": pa.array([_SERIAL_VERSION], type=pa.string()),
+            "n_layers": pa.array(
+                [len(topicdb.soft_cluster_tree.layers)], type=pa.int32()
+            ),
+            "has_reduced": pa.array([has_reduced], type=pa.bool_()),
+            "cluster_tree": pa.array(
+                [json.dumps(uid_tree)],
+                type=pa.string(),
+            ),
+        }
+    )
     lance.write_dataset(config_table, str(path / "config.lance"))
 
 
@@ -303,8 +321,7 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
     raw_tree = json.loads(config["cluster_tree"][0])
 
     cluster_tree = {
-        uid_to_ints(k): [uid_to_ints(child) for child in v]
-        for k, v in raw_tree.items()
+        uid_to_ints(k): [uid_to_ints(child) for child in v] for k, v in raw_tree.items()
     }
 
     # --- documents ---
@@ -318,17 +335,17 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
     # --- topics ---
     topic_dict = lance.dataset(str(path / "topics.lance")).to_table().to_pydict()
     topic_df = pd.DataFrame(topic_dict)
-    topic_df['index'] = topic_df['uid'].map(uid_to_ints)
-    topic_df.drop(columns='uid', inplace=True)
-    topic_df.set_index('index', drop=True, inplace=True)
-    
+    topic_df["index"] = topic_df["uid"].map(uid_to_ints)
+    topic_df.drop(columns="uid", inplace=True)
+    topic_df.set_index("index", drop=True, inplace=True)
+
     # --- clusters: reconstruct one csr_matrix per layer ---
     coo_dict = lance.dataset(str(path / "clusters.lance")).to_table().to_pydict()
-    layers_arr   = np.array(coo_dict["layer"],   dtype=np.int16)
-    rows_arr     = np.array(coo_dict["row_idx"],  dtype=np.int32)
-    cols_arr     = np.array(coo_dict["col_idx"],  dtype=np.int16)
-    vals_arr     = np.array(coo_dict["value"],    dtype=np.uint8)  # safe: values are 0-255
-    n_docs       = len(sample_df)
+    layers_arr = np.array(coo_dict["layer"], dtype=np.int16)
+    rows_arr = np.array(coo_dict["row_idx"], dtype=np.int32)
+    cols_arr = np.array(coo_dict["col_idx"], dtype=np.int16)
+    vals_arr = np.array(coo_dict["value"], dtype=np.uint8)  # safe: values are 0-255
+    n_docs = len(sample_df)
 
     matrices = []
     for layer_idx in range(n_layers):
@@ -360,9 +377,11 @@ def load_topic_database_lance(path, SoftClusterTree, TopicDatabase):
 # Internal helpers
 # =============================================================================
 
+
 def _pandas_col_to_arrow(series: pd.Series):
     """Infer a PyArrow type from a pandas Series for schema construction."""
     import pyarrow as pa
+
     dtype = series.dtype
     if pd.api.types.is_integer_dtype(dtype):
         return pa.int64()

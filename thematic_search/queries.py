@@ -3,10 +3,12 @@ from typing import Union, List, Optional
 import pandas as pd
 from .softclustertree import IndexExpr
 
+
 class FuzzyQuery:
     """
     A query object operating on the entire soft cluster matrix at once.
     """
+
     def __init__(self, db, matrix: np.ndarray):
         self.db = db
         self.matrix = matrix
@@ -18,12 +20,12 @@ class FuzzyQuery:
 
     def unwrap(self) -> np.ndarray:
         return self.matrix
-    
+
     def _apply_sample_mask(self, indices):
         mask = np.isin(np.arange(self.matrix.shape[0]), indices)
         self.matrix[~mask, :] = 0
-    
-    def samples_where(self, query: str)->"FuzzyQuery":
+
+    def samples_where(self, query: str) -> "FuzzyQuery":
         """
         Apply a sample metadata filter to the query.
 
@@ -32,24 +34,18 @@ class FuzzyQuery:
         query : str
             A query string to pass to sample_df.query()
         """
-        indices = self.db._docs_where(
-            np.arange(self.matrix.shape[0]),
-            query
-        )
+        indices = self.db._docs_where(np.arange(self.matrix.shape[0]), query)
         self._apply_sample_mask(indices)
         return FuzzyQuery(self.db, self.matrix)
-    
+
     def _indexed_colimit(self, indices):
         mask = np.isin(np.arange(self.matrix.shape[1]), indices)
         self.matrix[:, ~mask] = 0
         A = self.db.soft_cluster_tree.adjacency_closure
-        indexed_colimit = np.max(
-            self.matrix[:, :, None] * A[None, :, :],
-            axis=1
-        )
+        indexed_colimit = np.max(self.matrix[:, :, None] * A[None, :, :], axis=1)
         return indexed_colimit
 
-    def topics_where(self, query: str)->"FuzzyQuery":
+    def topics_where(self, query: str) -> "FuzzyQuery":
         """
         Apply a topic metadata filter to the query by
         computing the colimit over the topic tree
@@ -60,13 +56,12 @@ class FuzzyQuery:
         query : str
             A query string to pass to topic_df.query()
         """
-        indices = np.array(self.db._topics_where(
-            self.db.topic_df.index.to_numpy(),
-            query
-        ))
+        indices = np.array(
+            self.db._topics_where(self.db.topic_df.index.to_numpy(), query)
+        )
         return FuzzyQuery(self.db, self._indexed_colimit(indices))
 
-    def samples(self, threshold: float=1.0)->"SampleQuery":
+    def samples(self, threshold: float = 1.0) -> "SampleQuery":
         """
         Return a SampleQuery containing samples that are contained in
         at least one topic with strength >= threshold.
@@ -79,12 +74,12 @@ class FuzzyQuery:
             Threshold at which to include samples in result
         """
         sample_vec = np.max(self.matrix, axis=1)
-        indices = (
-            sample_vec>=self.db.soft_cluster_tree.to_int(threshold)
-        ).nonzero()[0]
+        indices = (sample_vec >= self.db.soft_cluster_tree.to_int(threshold)).nonzero()[
+            0
+        ]
         return SampleQuery(self.db, indices)
-    
-    def topics(self, threshold: float=1.0)->"TopicQuery":
+
+    def topics(self, threshold: float = 1.0) -> "TopicQuery":
         """
         Return a TopicQuery containing topics that contain
         at least one sample with strength >= threshold.
@@ -97,10 +92,11 @@ class FuzzyQuery:
             Threshold at which to include topics in result
         """
         topic_vec = np.max(self.matrix, axis=0)
-        indices = (
-            topic_vec >= self.db.soft_cluster_tree.to_int(threshold)
-        ).nonzero()[0]
+        indices = (topic_vec >= self.db.soft_cluster_tree.to_int(threshold)).nonzero()[
+            0
+        ]
         return TopicQuery(self.db, indices)
+
 
 class SampleQuery:
     """
@@ -110,6 +106,7 @@ class SampleQuery:
     Typical usage:
         topicdb.q.search("jazz music").nearby().topics().theme()
     """
+
     def __init__(self, db, indices: np.ndarray):
         self.db = db
         self.indices = indices
@@ -129,7 +126,7 @@ class SampleQuery:
         k : int, optional
             Number of nearest neighbours. Defaults to topicdb.default_k.
         """
-        k = k or self.db.default_k 
+        k = k or self.db.default_k
         vector = self.embeddings().mean(axis=0)
         indices = self.db._nearby(vector, k)
         return SampleQuery(self.db, indices)
@@ -145,11 +142,7 @@ class SampleQuery:
             'OR'  - return topics that contain any of the indices
             'AND' - return topics that contain all of the indices
         """
-        topics = self.db._topics(
-            self.indices,
-            threshold=threshold,
-            logic=logic
-        )
+        topics = self.db._topics(self.indices, threshold=threshold, logic=logic)
         return TopicQuery(self.db, topics)
 
     def theme(self) -> "TopicQuery":
@@ -195,9 +188,10 @@ class SampleQuery:
         return SampleQuery(self.db, indices)
 
     def to_fuzzy(self) -> "FuzzyQuery":
-        """Use this SampleQuery's indices to filter a FuzzyQuery """
+        """Use this SampleQuery's indices to filter a FuzzyQuery"""
         fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
         return fq._apply_sample_mask(self.indices)
+
 
 class TopicQuery:
     """
@@ -207,6 +201,7 @@ class TopicQuery:
     Typical usage:
         topicdb.q.search("jazz music").theme().parents().info()
     """
+
     def __init__(self, db, indices: list):
         self.db = db
         self.indices = indices
@@ -243,7 +238,7 @@ class TopicQuery:
         Return document indices inside these topics, combined with OR logic.
 
         Parameters
-        ----------  
+        ----------
         threshold : float, optional (default=1.0)
             Minimum inclusion strength in [0, 1].
         """
@@ -257,8 +252,8 @@ class TopicQuery:
     def metadata(self) -> pd.DataFrame:
         """Return topic metadata rows for these topics."""
         return self.db._info(self.indices)
-    
-    def where(self, query:str ) -> "SampleQuery":
+
+    def where(self, query: str) -> "SampleQuery":
         """
         Filter topics by metadata column values.
 
@@ -270,21 +265,24 @@ class TopicQuery:
         return TopicQuery(self.db, topics)
 
     def to_fuzzy(self) -> "FuzzyQuery":
-        """ Use this TopicQuery's indices as a filter for a FuzzyQuery """
+        """Use this TopicQuery's indices as a filter for a FuzzyQuery"""
         fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
         return FuzzyQuery(self.db, fq._indexed_colimit(self.indices))
 
+
 # =================== Root Query ===================
+
 
 class RootQuery:
     """
     Entry point for all queries on a TopicDatabase.
     Access via topicdb.q
     """
+
     def __init__(self, db):
         self.db = db
 
-    def neighbours(self, text: str, k: int=15) -> SampleQuery:
+    def neighbours(self, text: str, k: int = 15) -> SampleQuery:
         """
         Embed a text string and return an SampleQuery carrying the query vector.
         Requires a sentence transformer model to be provided at construction time.
@@ -303,7 +301,7 @@ class RootQuery:
         vec = self.db.embedding_model.encode(text)
         indices = self.db._nearby(vec, k=k)
         return SampleQuery(self.db, indices)
-    
+
     def samples(self, indices: Union[List[int], np.ndarray]) -> SampleQuery:
         """
         Use a set of document indices as the query entry point.
@@ -347,14 +345,14 @@ class RootQuery:
         ----------
         name : str
         """
-        match_df = self.db.topic_df[self.db.topic_df['name']==name]
-        if len(match_df)==1:
+        match_df = self.db.topic_df[self.db.topic_df["name"] == name]
+        if len(match_df) == 1:
             idx = match_df.index[0]
             return TopicQuery(self.db, [idx])
-        elif len(match_df)==0:
+        elif len(match_df) == 0:
             print(f"No topics with name '{name}' found.")
             return TopicQuery(self.db, [])
-        elif len(match_df)>1:
+        elif len(match_df) > 1:
             print(f"Multiple topics with name '{name}' found:")
             print(match_df)
             print(f"Please select a topic by index to disambiguate.")
@@ -371,7 +369,7 @@ class RootQuery:
         """
         fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
         return fq.samples_where(query)
-    
+
     def topics_where(self, query: str) -> TopicQuery:
         """
         Request the set of topics whose metadata matches a Pandas query.
@@ -380,18 +378,18 @@ class RootQuery:
         ----------
         query : str
             A query string following `pandas.DataFrame.query` syntax.
-        """      
+        """
         fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
         return fq.topics_where(query)
 
-    def index_expr(self, expr: IndexExpr, threshold: float=1.0) -> SampleQuery:
+    def index_expr(self, expr: IndexExpr, threshold: float = 1.0) -> SampleQuery:
         """
-        Initialize an SampleQuery with the indices inside an IndexExpr 
+        Initialize an SampleQuery with the indices inside an IndexExpr
 
         Parameters
         ----------
         expr: IndexExpr
-            The expression to evaluate 
+            The expression to evaluate
         threshold: float (optional default=1.0)
             Minimum inclusion strength in [0, 1].
         """
