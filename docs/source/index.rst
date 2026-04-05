@@ -5,7 +5,11 @@ Thematic Search is a package for *thematic search* on documents that have a hier
 
 .. image:: data_migrations.png
 
-This is an alpha version, so one still must install from source::
+This is a beta version. You can install the latest release from PyPI::
+
+    pip install thematic_search
+
+Or the latest dev version from source::
 
     git clone git@github.com:kalebruscitti/thematic-search.git
     pip install thematic-search

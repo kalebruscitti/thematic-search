@@ -6,7 +6,13 @@ Full documentation is available on [ReadTheDocs](https://thematic-search.readthe
 
 ## Installation
 
-This is an alpha release; install from source:
+This is a beta release. You can install from PyPI:
+
+```bash
+pip install thematic_search
+```
+
+Or install from source:
 
 ```bash
 git clone git@github.com:kalebruscitti/thematic-search.git
