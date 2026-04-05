@@ -284,20 +284,20 @@ class SoftClusterTree:
     def inside(
         self,
         expr: Union[IndexExpr, str],
-        min_strength: float = 1.0,
+        threshold: float = 1.0,
     ) -> np.ndarray:
         """
         Return indices of documents satisfying the cluster expression
-        with inclusion strength >= min_strength.
+        with inclusion strength >= threshold.
 
         Parameters
         ----------
         expr : Cluster or int
             A Cluster expression or an index for a single cluster.
-        min_strength : float, optional (default=1.0)
+        threshold : float, optional (default=1.0)
             Minimum inclusion strength in [0, 1].
-            - min_strength=1.0 means full membership (strength == 255)
-            - min_strength just above 0 combined with ~~a gives partial membership
+            - threshold=1.0 means full membership (strength == 255)
+            - threshold just above 0 combined with ~~a gives partial membership
 
         Returns
         -------
@@ -306,7 +306,7 @@ class SoftClusterTree:
         """
         if not isinstance(expr, IndexExpr):
             expr = Cluster(expr)
-        threshold = self.to_int(min_strength)
+        threshold = self.to_int(threshold)
         strengths = self._evaluate(expr)
         return np.where(strengths >= threshold)[0]
 

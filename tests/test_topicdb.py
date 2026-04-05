@@ -96,23 +96,23 @@ class TestSoftClusterTree:
 
     def test_inside_full_membership(self):
         topic_idx = self.tree.loc_to_idx[(0,0)]
-        idx = self.tree.inside(topic_idx, min_strength=1.0)
-        # At min_strength=1.0, only docs with uint8 strength==255 are returned
+        idx = self.tree.inside(topic_idx, threshold=1.0)
+        # At threshold=1.0, only docs with uint8 strength==255 are returned
         strengths = self.tree._get_strength_vector(topic_idx)
         expected = np.where(strengths == 255)[0]
         np.testing.assert_array_equal(np.sort(idx), np.sort(expected))
 
     def test_inside_partial_membership(self):
         topic_idx = self.tree.loc_to_idx[(0,0)]
-        idx_full = self.tree.inside(topic_idx, min_strength=1.0)
-        idx_partial = self.tree.inside(topic_idx, min_strength=0.0)
+        idx_full = self.tree.inside(topic_idx, threshold=1.0)
+        idx_partial = self.tree.inside(topic_idx, threshold=0.0)
         # Partial should return at least as many docs as full
         assert len(idx_partial) >= len(idx_full)
 
     def test_inside_double_negation(self):
         """~~a should return docs with any nonzero strength."""
         leaf = self.tree.cluster(0, 0)
-        idx_double_neg = self.tree.inside(~~leaf, min_strength=1.0)
+        idx_double_neg = self.tree.inside(~~leaf, threshold=1.0)
         topic_idx = self.tree.loc_to_idx[(0,0)]
         strengths = self.tree._get_strength_vector(topic_idx)
         expected = np.where(strengths > 0)[0]
@@ -121,7 +121,7 @@ class TestSoftClusterTree:
     def test_inside_negation(self):
         """~a should return docs with zero strength."""
         leaf = self.tree.cluster(0, 0)
-        idx_neg = self.tree.inside(~leaf, min_strength=1.0)
+        idx_neg = self.tree.inside(~leaf, threshold=1.0)
         topic_idx = self.tree.loc_to_idx[(0,0)]
         strengths = self.tree._get_strength_vector(topic_idx)
         expected = np.where(strengths == 0)[0]
@@ -131,7 +131,7 @@ class TestSoftClusterTree:
         """a & b should return docs where min(strength_a, strength_b) >= threshold."""
         a = self.tree.cluster(0, 0)
         b = self.tree.cluster(0, 1)
-        idx_and = self.tree.inside(a & b, min_strength=0.5)
+        idx_and = self.tree.inside(a & b, threshold=0.5)
         sa = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,0)])
         sb = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,1)])
         threshold = SoftClusterTree.to_int(0.5)
@@ -142,7 +142,7 @@ class TestSoftClusterTree:
         """a | b should return docs where max(strength_a, strength_b) >= threshold."""
         a = self.tree.cluster(0, 0)
         b = self.tree.cluster(0, 1)
-        idx_or = self.tree.inside(a | b, min_strength=0.5)
+        idx_or = self.tree.inside(a | b, threshold=0.5)
         sa = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,0)])
         sb = self.tree._get_strength_vector(self.tree.loc_to_idx[(0,1)])
         threshold = SoftClusterTree.to_int(0.5)
@@ -254,7 +254,7 @@ class TestTopicDatabase:
         assert embs.shape == (self.db.default_k, self.embeddings.shape[1])
 
     def test_topics_returns_topic_query(self):
-        tq = self.db.q.samples([0]).neighbours().topics(min_strength=0.5)
+        tq = self.db.q.samples([0]).neighbours().topics(threshold=0.5)
         assert isinstance(tq, TopicQuery)
         assert len(tq.indices) > 0
 
@@ -290,7 +290,7 @@ class TestTopicDatabase:
         assert tq.indices[0] == self.sct.loc_to_idx[(1,0)]
 
     def test_inside_chain(self):
-        iq = self.db.q.topic(1, 0).samples(min_strength=0.0)
+        iq = self.db.q.topic(1, 0).samples(threshold=0.0)
         assert isinstance(iq, SampleQuery)
         assert len(iq.indices) > 0
 
@@ -320,7 +320,7 @@ class TestTopicDatabase:
             .topic(1, 0)       # enter at a known mid-tree node
             .children()        # step down to layer-0 leaves
             .least_upper_bound()            # back up to (1, 0)
-            .samples(min_strength=0.3)
+            .samples(threshold=0.3)
             .metadata()
         )
         assert isinstance(result, pd.DataFrame)

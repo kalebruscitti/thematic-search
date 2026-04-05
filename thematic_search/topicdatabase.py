@@ -156,7 +156,7 @@ class TopicDatabase:
         result = df.query(query)
         return result.index.to_list()
 
-    def _topics(self, indices: np.ndarray, min_strength: float = 1, logic: str = "OR") -> list:
+    def _topics(self, indices: np.ndarray, threshold: float = 1, logic: str = "OR") -> list:
         """
         Return the topics containing a set of document indices.
         Uses the finest (lowest layer) topic for each document.
@@ -166,7 +166,7 @@ class TopicDatabase:
             doc_topics = set()
             for layer in range(self.soft_cluster_tree.n_layers):
                 col_vec = self.soft_cluster_tree.layers[layer].getrow(i)
-                nonzero_cols = (col_vec>=255*min_strength).nonzero()[1]
+                nonzero_cols = (col_vec>=255*threshold).nonzero()[1]
                 if len(nonzero_cols) > 0:
                     for col in nonzero_cols:
                         doc_topics.add(self.soft_cluster_tree.loc_to_idx[(layer, col)])
