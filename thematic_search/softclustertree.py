@@ -304,7 +304,7 @@ class SoftClusterTree:
         np.ndarray
             Array of document indices.
         """
-        if isinstance(expr, int):
+        if not isinstance(expr, IndexExpr):
             expr = Cluster(expr)
         threshold = self.to_int(min_strength)
         strengths = self._evaluate(expr)

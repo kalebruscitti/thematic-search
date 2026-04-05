@@ -8,7 +8,7 @@ import pytest
 
 from thematic_search.softclustertree import SoftClusterTree, Cluster
 from thematic_search.topicdatabase import TopicDatabase
-from thematic_search.queries import  IndexQuery, TopicQuery
+from thematic_search.queries import  SampleQuery, TopicQuery
 from thematic_search.utilities import topic_uid, uid_to_ints
 
 
@@ -231,39 +231,39 @@ class TestTopicDatabase:
 
     def test_search_without_model_raises(self):
         with pytest.raises(ValueError, match="embedding model"):
-            self.db.q.search("test query")
+            self.db.q.neighbours("test query")
 
     def test_nearby_returns_indices(self):
-        idx = self.db.q.from_docs([0]).nearby(k=5).unwrap()
+        idx = self.db.q.from_docs([0]).neighbours(k=5).unwrap()
         assert len(idx) == 5
         assert isinstance(idx, np.ndarray)
 
     def test_nearby_default_k(self):
-        idx = self.db.q.from_docs([0]).nearby().unwrap()
+        idx = self.db.q.from_docs([0]).neighbours().unwrap()
         assert len(idx) == self.db.default_k
 
     def test_documents_terminal(self):
-        df = self.db.q.from_docs([0]).nearby().documents()
+        df = self.db.q.from_docs([0]).neighbours().metadata()
         assert isinstance(df, pd.DataFrame)
         assert len(df) == self.db.default_k
         assert "text" in df.columns
 
     def test_embeddings_terminal(self):
-        embs = self.db.q.from_docs([0]).nearby().embeddings()
+        embs = self.db.q.from_docs([0]).neighbours().embeddings()
         assert embs.shape == (self.db.default_k, self.embeddings.shape[1])
 
     def test_topics_returns_topic_query(self):
-        tq = self.db.q.from_docs([0]).nearby().topics(min_strength=0.5)
+        tq = self.db.q.from_docs([0]).neighbours().topics(min_strength=0.5)
         assert isinstance(tq, TopicQuery)
         assert len(tq.indices) > 0
 
     def test_theme_returns_topic_query(self):
-        tq = self.db.q.from_docs([0]).nearby().theme()
+        tq = self.db.q.from_docs([0]).neighbours().theme()
         assert isinstance(tq, TopicQuery)
         assert len(tq.indices) == 1
 
     def test_theme_uid_is_valid(self):
-        uid = self.db.q.from_docs([0]).nearby().theme().indices[0]
+        uid = self.db.q.from_docs([0]).neighbours().theme().indices[0]
         assert uid in self.sct.idx_to_loc
 
     def test_info_terminal(self):
@@ -290,18 +290,18 @@ class TestTopicDatabase:
 
     def test_inside_chain(self):
         iq = self.db.q.topic(1, 0).inside(min_strength=0.0)
-        assert isinstance(iq, IndexQuery)
+        assert isinstance(iq, SampleQuery)
         assert len(iq.indices) > 0
 
     def test_where_filter(self):
         # label is in {0,1,2,3}, filter for label==0
-        iq_filtered = self.db.q.from_docs([0]).nearby(k=50).where("label==0")
-        df_filtered = iq_filtered.documents()
+        iq_filtered = self.db.q.from_docs([0]).neighbours(k=50).where("label==0")
+        df_filtered = iq_filtered.metadata()
         assert len(df_filtered) <= 50
         assert (df_filtered["label"] == 0).all()
 
     def test_strengths_in_chain(self):
-        iq = self.db.q.from_docs([0]).nearby()
+        iq = self.db.q.from_docs([0]).neighbours()
         leaf = self.sct.cluster(0, 0)
         s = iq.strengths(leaf)
         assert len(s) == self.db.default_k
@@ -320,7 +320,7 @@ class TestTopicDatabase:
             .children()        # step down to layer-0 leaves
             .least_upper_bound()            # back up to (1, 0)
             .inside(min_strength=0.3)
-            .documents()
+            .metadata()
         )
         assert isinstance(result, pd.DataFrame)
 

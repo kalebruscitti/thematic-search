@@ -37,7 +37,7 @@ class FuzzyQuery:
     def samples(self, threshold: float=1.0):
         sample_vec = np.max(self.matrix, axis=1)
         indices = (sample_vec>=threshold).nonzero()[0]
-        return IndexQuery(self.db, indices)
+        return SampleQuery(self.db, indices)
     
     def topics(self, threshold: float=1.0):
         topic_vec = np.max(self.matrix, axis=0)
@@ -46,7 +46,7 @@ class FuzzyQuery:
         indices = np.array([idx_to_idx[i] for i in indices])
         return TopicQuery(self.db, indices)
 
-class IndexQuery:
+class SampleQuery:
     """
     A query object carrying a set of document indices.
     Supports navigation to topics or retrieval of document data.
@@ -59,15 +59,14 @@ class IndexQuery:
         self.indices = indices
 
     def __repr__(self):
-        return f"IndexQuery({len(self.indices)} documents)"
+        return f"SampleQuery({len(self.indices)} samples)"
 
     def unwrap(self) -> np.ndarray:
         return self.indices
 
-    def nearby(self, k: int = None) -> "IndexQuery":
+    def neighbours(self, k: int = None) -> "SampleQuery":
         """
-        Find the k nearest neighbours of the query vector in the embedding space.
-        Requires that this IndexQuery was created via search() or vector() or from_docs().
+        Average the embeddings of this SampleQuery's indices, then find the k nearest neighbours.
 
         Parameters
         ----------
@@ -77,7 +76,7 @@ class IndexQuery:
         k = k or self.db.default_k 
         vector = self.embeddings().mean(axis=0)
         indices = self.db._nearby(vector, k)
-        return IndexQuery(self.db, indices)
+        return SampleQuery(self.db, indices)
 
     def topics(self, min_strength: float = 1, logic: str = "OR") -> "TopicQuery":
         """
@@ -105,7 +104,7 @@ class IndexQuery:
         topic_idx = self.db._theme(self.indices)
         return TopicQuery(self.db, [topic_idx])
 
-    def documents(self) -> pd.DataFrame:
+    def metadata(self) -> pd.DataFrame:
         """Return the document metadata rows for these indices."""
         return self.db._documents(self.indices)
 
@@ -128,7 +127,7 @@ class IndexQuery:
         """
         return self.db.soft_cluster_tree.strengths(expr, self.indices)
 
-    def where(self, query:str ) -> "IndexQuery":
+    def where(self, query:str ) -> "SampleQuery":
         """
         Filter documents by metadata column values.
 
@@ -137,7 +136,7 @@ class IndexQuery:
         query.where("author=='Alice'")
         """
         indices = self.db._docs_where(self.indices, query)
-        return IndexQuery(self.db, indices)
+        return SampleQuery(self.db, indices)
 
 
 class TopicQuery:
@@ -179,7 +178,7 @@ class TopicQuery:
     def inside(
         self,
         min_strength: float = 1.0,
-    ) -> "IndexQuery":
+    ) -> "SampleQuery":
         """
         Return document indices inside these topics, combined with OR logic.
 
@@ -193,13 +192,13 @@ class TopicQuery:
             indices.update(
                 self.db.soft_cluster_tree.inside(idx, min_strength=min_strength).tolist()
             )
-        return IndexQuery(self.db, np.array(sorted(indices)))
+        return SampleQuery(self.db, np.array(sorted(indices)))
 
     def info(self) -> pd.DataFrame:
         """Return topic metadata rows for these topics."""
         return self.db._info(self.indices)
     
-    def where(self, query:str ) -> "IndexQuery":
+    def where(self, query:str ) -> "SampleQuery":
         """
         Filter topics by metadata column values.
 
@@ -221,9 +220,9 @@ class RootQuery:
     def __init__(self, db):
         self.db = db
 
-    def search(self, text: str, k: int=15) -> IndexQuery:
+    def neighbours(self, text: str, k: int=15) -> SampleQuery:
         """
-        Embed a text string and return an IndexQuery carrying the query vector.
+        Embed a text string and return an SampleQuery carrying the query vector.
         Requires a sentence transformer model to be provided at construction time.
 
         Parameters
@@ -233,15 +232,15 @@ class RootQuery:
         """
         if self.db.embedding_model is None:
             raise ValueError(
-                "search() requires an embedding model. "
+                "neighbours() requires an embedding model. "
                 "Pass a SentenceTransformer model as the `embedding_model` "
                 "parameter when constructing TopicDatabase."
             )
         vec = self.db.embedding_model.encode(text)
         indices = self.db._nearby(vec, k=k)
-        return IndexQuery(self.db, indices)
+        return SampleQuery(self.db, indices)
     
-    def from_docs(self, indices: Union[List[int], np.ndarray]) -> IndexQuery:
+    def from_docs(self, indices: Union[List[int], np.ndarray]) -> SampleQuery:
         """
         Use a set of document indices as the query entry point.
         Their embedding vectors are averaged to form a single query vector.
@@ -252,7 +251,7 @@ class RootQuery:
             Document indices to use as the query.
         """
         indices = np.array(indices)
-        return IndexQuery(self.db, indices)
+        return SampleQuery(self.db, indices)
 
     def topic(self, layer: int, cluster_number: int) -> TopicQuery:
         """
@@ -297,7 +296,7 @@ class RootQuery:
             print(f"Please select a topic by index to disambiguate.")
             return TopicQuery(self.db, [])
 
-    def docs_where(self, query: str) -> IndexQuery:
+    def docs_where(self, query: str) -> SampleQuery:
         """
         Request the set of documents whose metadata matches a Pandas query.
 
@@ -307,7 +306,7 @@ class RootQuery:
             A query string following `pandas.DataFrame.query` syntax.
         """
         all_indices = self.db.document_df.index.to_numpy()
-        return IndexQuery(self.db, self.db._docs_where(all_indices, query))
+        return SampleQuery(self.db, self.db._docs_where(all_indices, query))
     
     def topics_where(self, query: str) -> TopicQuery:
         """
@@ -318,11 +317,12 @@ class RootQuery:
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """      
-        return TopicQuery(self.db, self.db._topics_where(query))
+        all_indices = self.db.topic_df.index.to_numpy()
+        return TopicQuery(self.db,self.db._topics_where(all_indices, query))
 
-    def index_expr(self, expr: IndexExpr, min_strength: float=1.0) -> IndexQuery:
+    def index_expr(self, expr: IndexExpr, min_strength: float=1.0) -> SampleQuery:
         """
-        Initialize an IndexQuery with the indices inside an IndexExpr 
+        Initialize an SampleQuery with the indices inside an IndexExpr 
 
         Parameters
         ----------
@@ -332,4 +332,4 @@ class RootQuery:
             Minimum inclusion strength in [0, 1].
         """
         indices = self.db.soft_cluster_tree.inside(expr, min_strength=min_strength)
-        return IndexQuery(self.db, indices)
+        return SampleQuery(self.db, indices)

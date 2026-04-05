@@ -81,18 +81,24 @@ class TopicDatabase:
         if topic_df is None:
             self.topic_df = self._minimal_topic_df()
         else:
+            # Re-index from original node labels to indices
+            # cluster_labels should be a map of the form location tuple -> labels
+            if cluster_labels is None:
+                # In this case we are assuming that the topic_df is indexed by tuples
+                label_to_idx = self.soft_cluster_tree.loc_to_idx
             if cluster_labels is not None:
-                # Re-index from original node labels to indices
-                label_to_idx = {v: i for i, v in enumerate(cluster_labels.items())}
-                unknown = set(topic_df.index) - set(label_to_idx.keys())
-                if unknown:
-                    warnings.warn(
-                        f"topic_df contains {len(unknown)} row(s) with labels not "
-                        f"found in cluster_labels; they will be dropped: {unknown}"
-                    )
-                    topic_df = topic_df.loc[topic_df.index.isin(label_to_idx)]
-                topic_df = topic_df.copy()
-                topic_df.index = topic_df.index.map(label_to_idx)
+                # In this case we assume the index is some set of labels
+                label_to_idx = {v: i for i, v in enumerate(cluster_labels.values())}
+
+            unknown = set(topic_df.index) - set(label_to_idx.keys())
+            if unknown:
+                warnings.warn(
+                    f"topic_df contains {len(unknown)} row(s) with labels not "
+                    f"found in cluster_labels; they will be dropped: {unknown}"
+                )
+                topic_df = topic_df.loc[topic_df.index.isin(label_to_idx)]
+            topic_df = topic_df.copy()
+            topic_df.index = topic_df.index.map(label_to_idx)
             self.topic_df = topic_df
 
     def _minimal_topic_df(self) -> pd.DataFrame:
