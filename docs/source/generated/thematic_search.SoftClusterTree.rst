@@ -15,9 +15,9 @@
    
       ~SoftClusterTree.__init__
       ~SoftClusterTree.children
+      ~SoftClusterTree.cluster
       ~SoftClusterTree.inside
       ~SoftClusterTree.join
-      ~SoftClusterTree.leaf
       ~SoftClusterTree.parents
       ~SoftClusterTree.strengths
       ~SoftClusterTree.to_float

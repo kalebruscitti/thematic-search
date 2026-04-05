@@ -16,7 +16,7 @@ Suppose `toponymy` is a fitted toponymy object - then, using toponymy's serializ
         ),
         embedding_vectors = topic_model.embedding_vectors,
         reduced_vectors = topic_model.reduced_vectors,
-        document_df = topic_model.document_df,
+        sample_df = topic_model.document_df,
         topic_df = topic_model.topic_df,
     )
 

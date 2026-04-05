@@ -15,10 +15,11 @@
    
       ~TopicQuery.__init__
       ~TopicQuery.children
-      ~TopicQuery.info
-      ~TopicQuery.inside
       ~TopicQuery.least_upper_bound
+      ~TopicQuery.metadata
       ~TopicQuery.parents
+      ~TopicQuery.samples
+      ~TopicQuery.to_fuzzy
       ~TopicQuery.unwrap
       ~TopicQuery.where
    

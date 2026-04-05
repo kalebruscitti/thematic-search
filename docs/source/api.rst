@@ -23,7 +23,8 @@ Query Classes
 
    RootQuery
    TopicQuery
-   IndexQuery
+   SampleQuery
+   FuzzyQuery
 
 Utility Functions
 -----------------

@@ -28,7 +28,9 @@
 
    .. autosummary::
    
+      ~TopicDatabase.cluster_matrix
       ~TopicDatabase.q
       ~TopicDatabase.topics
+      ~TopicDatabase.tree
    
    
