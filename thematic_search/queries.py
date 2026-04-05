@@ -18,7 +18,11 @@ class FuzzyQuery:
 
     def unwrap(self) -> np.ndarray:
         return self.matrix
-
+    
+    def _apply_sample_mask(self, indices):
+        mask = np.isin(np.arange(self.matrix.shape[0]), indices)
+        self.matrix[~mask, :] = 0
+    
     def samples_where(self, query: str)->"FuzzyQuery":
         """
         Apply a sample metadata filter to the query.
@@ -32,9 +36,18 @@ class FuzzyQuery:
             np.arange(self.matrix.shape[0]),
             query
         )
-        mask = np.isin(np.arange(self.matrix.shape[0]), indices)
-        self.matrix[~mask, :] = 0
+        self._apply_sample_mask(indices)
         return FuzzyQuery(self.db, self.matrix)
+    
+    def _indexed_colimit(self, indices):
+        mask = np.isin(np.arange(self.matrix.shape[1]), indices)
+        self.matrix[:, ~mask] = 0
+        A = self.db.soft_cluster_tree.adjacency_closure
+        indexed_colimit = np.max(
+            self.matrix[:, :, None] * A[None, :, :],
+            axis=1
+        )
+        return indexed_colimit
 
     def topics_where(self, query: str)->"FuzzyQuery":
         """
@@ -51,14 +64,7 @@ class FuzzyQuery:
             self.db.topic_df.index.to_numpy(),
             query
         ))
-        mask = np.isin(np.arange(self.matrix.shape[1]), indices)
-        self.matrix[:, ~mask] = 0
-        A = self.db.soft_cluster_tree.adjacency_closure
-        indexed_colimit = np.max(
-            self.matrix[:, :, None] * A[None, :, :],
-            axis=1
-        )
-        return FuzzyQuery(self.db, indexed_colimit)
+        return FuzzyQuery(self.db, self.indexed_colimit(indices))
 
     def samples(self, threshold: float=1.0)->"SampleQuery":
         """
@@ -177,7 +183,7 @@ class SampleQuery:
         """
         return self.db.soft_cluster_tree.strengths(expr, self.indices)
 
-    def where(self, query:str ) -> "SampleQuery":
+    def where(self, query: str) -> "SampleQuery":
         """
         Filter documents by metadata column values.
 
@@ -188,6 +194,10 @@ class SampleQuery:
         indices = self.db._docs_where(self.indices, query)
         return SampleQuery(self.db, indices)
 
+    def to_fuzzy(self) -> "FuzzyQuery":
+        """Use this SampleQuery's indices to filter a FuzzyQuery """
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        return fq._apply_sample_mask(self.indices)
 
 class TopicQuery:
     """
@@ -259,6 +269,10 @@ class TopicQuery:
         topics = self.db._topics_where(self.indices, query)
         return TopicQuery(self.db, topics)
 
+    def to_fuzzy(self) -> "FuzzyQuery":
+        """ Use this TopicQuery's indices as a filter for a FuzzyQuery """
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        return FuzzyQuery(self.db, fq._indexed_colimit(self.indices))
 
 # =================== Root Query ===================
 
@@ -346,17 +360,17 @@ class RootQuery:
             print(f"Please select a topic by index to disambiguate.")
             return TopicQuery(self.db, [])
 
-    def docs_where(self, query: str) -> SampleQuery:
+    def samples_where(self, query: str) -> SampleQuery:
         """
-        Request the set of documents whose metadata matches a Pandas query.
+        Request the set of samples whose metadata matches a Pandas query.
 
         Parameters
         ----------
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """
-        all_indices = self.db.document_df.index.to_numpy()
-        return SampleQuery(self.db, self.db._docs_where(all_indices, query))
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        return fq.samples_where(query)
     
     def topics_where(self, query: str) -> TopicQuery:
         """
@@ -367,8 +381,8 @@ class RootQuery:
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """      
-        all_indices = self.db.topic_df.index.to_numpy()
-        return TopicQuery(self.db,self.db._topics_where(all_indices, query))
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        return fq.topics_where(query)
 
     def index_expr(self, expr: IndexExpr, min_strength: float=1.0) -> SampleQuery:
         """

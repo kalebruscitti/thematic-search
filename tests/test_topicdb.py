@@ -59,11 +59,12 @@ def make_test_data(n_docs=100, n_features=32, seed=42):
     for layer, n_clusters in [(0, 4), (1, 2)]:
         for j in range(n_clusters):
             rows.append({
+                "index": (layer, j),
                 "layer": layer,
                 "cluster_number": j,
                 "name": f"Topic L{layer}C{j}",
             })
-    topic_df = pd.DataFrame(rows)
+    topic_df = pd.DataFrame(rows).set_index('index')
 
     return cluster_matrices, cluster_tree, embeddings, document_df, topic_df
 
