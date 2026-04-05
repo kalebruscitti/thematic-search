@@ -1,6 +1,6 @@
 from .topicdatabase import TopicDatabase
 from .softclustertree import SoftClusterTree, IndexExpr, Cluster, IndexAnd, IndexOr, IndexNot
-from .queries import  SampleQuery, TopicQuery, RootQuery
+from .queries import  SampleQuery, TopicQuery, RootQuery, FuzzyQuery
 import thematic_search.utilities as utils
 __all__ = [
     # Primary entry point
@@ -9,6 +9,7 @@ __all__ = [
     "SampleQuery",
     "TopicQuery",
     "RootQuery",
+    "FuzzyQuery",
     "SoftClusterTree",
     "IndexExpr",
     "Cluster",

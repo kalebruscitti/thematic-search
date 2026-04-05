@@ -16,11 +16,12 @@ To use Thematic Search, you need a hierarchical topic model of your dataset. The
 minimal ingredients are:
 
 - ``embedding_vectors``: an ``(n_docs, d)`` float array of document embeddings
-- ``cluster_tree``: a dictionary ``{node: [children]}`` representing your topic
-  hierarchy, where nodes can be any hashable labels (strings, ints, etc.)
-- ``cluster_layers``: a list of ``(n_docs, n_clusters)`` float arrays in ``[0,1]``,
+- ``cluster_tree``: a dictionary ``{(l, i)): [children]}`` representing your topic
+  hierarchy, where the keys ``(l, i)`` are tuples of ints.
+- ``cluster_layers``: a list of ``(n_docs, n_clusters)``-shaped float arrays in ``[0,1]``,
   one per layer, where ``cluster_layers[l][j, i]`` is the inclusion strength of
-  document ``j`` in the ``i``-th cluster at layer ``l``
+  document ``j`` in the ``i``-th cluster at layer ``l`` (i.e. node ``(l,i)`` 
+  of the cluster tree).
 
 Optionally you can also provide:
 
@@ -33,9 +34,10 @@ Optionally you can also provide:
 Converting your cluster tree
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Your ``cluster_tree`` can use your own node labels. The
-``convert_tree`` utility converts it into the ``(layer, index)`` tuple format
-required by ``SoftClusterTree``, and returns a ``cluster_labels`` mapping that
+Your ``cluster_tree`` can use your own node labels. If you have a ``cluster_tree``
+in the format ``{node: [children]}``, where ``node`` is any hashable label for each vertex
+of the tree, the ``convert_tree`` utility will it into the ``(layer, index)`` tuple format
+required by ``SoftClusterTree``, as well as returning a ``cluster_labels`` mapping that
 lets ``TopicDatabase`` automatically align your ``topic_metadata``::
 
     from thematic_search.utilities import convert_tree
@@ -70,7 +72,7 @@ it will be re-indexed automatically::
         SoftClusterTree(cluster_layers, cluster_tree),
         embedding_vectors=embedding_vectors,
         reduced_vectors=reduced_vectors,          # optional
-        document_df=document_metadata,            # optional
+        sample_df=document_metadata,            # optional
         topic_df=topic_metadata,                  # indexed by your node labels
         cluster_labels=cluster_labels,            # from convert_tree
     )
@@ -88,7 +90,7 @@ Semantic search
 
 Find the documents nearest to a query string in embedding space::
 
-    topicdb.q.search("Advancements in space technology").documents()
+    topicdb.q.neighbours("Advancements in space technology").metadata()
 
 This requires an ``embedding_model`` property to be provided to the TopicDatabase.
 
@@ -98,16 +100,16 @@ Thematic search
 Find the most specific topic that best covers the nearest neighbours of a
 query string::
 
-    topicdb.q.search("Advancements in space technology").theme().info()
+    topicdb.q.neighbours("Advancements in space technology").theme().metadata()
 
 Find all documents inside a given topic with at least 75% inclusion strength::
 
-    topicdb.q.topic_name("science").inside(min_strength=0.75).documents()
+    topicdb.q.topic_name("science").samples(0.75).metadata()
 
-Chaining queries
+Composing queries
 ~~~~~~~~~~~~~~~~
 
-Queries can be chained arbitrarily. For example, to find the theme of the
+Queries can be composed. For example, to find the theme of the
 documents inside the parent of a known topic::
 
-    topicdb.q.topic_name("physics").parents().inside().theme().info()
+    topicdb.q.topic_name("physics").parents().samples().theme().metadata()
