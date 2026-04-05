@@ -268,7 +268,7 @@ class TestTopicDatabase:
 
     def test_info_terminal(self):
         tq = self.db.q.topic(1, 0)
-        df = tq.info()
+        df = tq.metadata()
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 1
         assert "name" in df.columns

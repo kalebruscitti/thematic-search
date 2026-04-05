@@ -10,40 +10,82 @@ class FuzzyQuery:
     def __init__(self, db, matrix: np.ndarray):
         self.db = db
         self.matrix = matrix
-        self.idx_to_idx = self.db.soft_cluster_tree.idx_to_idx
 
-    def samples_where(self, query: str):
+    def samples_where(self, query: str)->"FuzzyQuery":
+        """
+        Apply a sample metadata filter to the query.
+
+        Parameters
+        ----------
+        query : str
+            A query string to pass to document_df.query()
+        """
         indices = self.db._docs_where(
             np.arange(self.matrix.shape[0]),
             query
         )
-        self.matrix[~indices,:] = 0
-        return FuzzyQuery(self, self.db, self.matrix)
+        mask = np.isin(np.arange(self.matrix.shape[0]), indices)
+        self.matrix[~mask, :] = 0
+        return FuzzyQuery(self.db, self.matrix)
 
-    def topics_where(self, query: str):
-        indices = self.db._topics_where(
-            self.db.soft_cluster_tree.indices, 
+    def topics_where(self, query: str)->"FuzzyQuery":
+        """
+        Apply a topic metadata filter to the query by
+        computing the colimit over the topic tree
+        indexed by the filter.
+
+        Parameters
+        ----------
+        query : str
+            A query string to pass to topic_df.query()
+        """
+        indices = np.array(self.db._topics_where(
+            self.db.topic_df.index.to_numpy(),
             query
-        )
-        indices = [self.idx_to_idx[idx] for idx in indices]
-        self.matrix[:, ~indices] = 0
+        ))
+        mask = np.isin(np.arange(self.matrix.shape[1]), indices)
+        self.matrix[:, ~mask] = 0
         A = self.db.soft_cluster_tree.adjacency_closure
         indexed_colimit = np.max(
             self.matrix[:, :, None] * A[None, :, :],
             axis=1
         )
-        return FuzzyQuery(self, self.db, indexed_colimit)
+        return FuzzyQuery(self.db, indexed_colimit)
 
-    def samples(self, threshold: float=1.0):
+    def samples(self, threshold: float=1.0)->"SampleQuery":
+        """
+        Return a SampleQuery containing samples that are contained in
+        at least one topic with strength >= threshold.
+
+        Note that this is a destructive operation when threshold!=0.0
+
+        Parameters
+        ----------
+        threshold : float (optional, default = 1.0)
+            Threshold at which to include samples in result
+        """
         sample_vec = np.max(self.matrix, axis=1)
-        indices = (sample_vec>=threshold).nonzero()[0]
+        indices = (
+            sample_vec>=self.db.soft_cluster_tree.to_int(threshold)
+        ).nonzero()[0]
         return SampleQuery(self.db, indices)
     
-    def topics(self, threshold: float=1.0):
+    def topics(self, threshold: float=1.0)->"TopicQuery":
+        """
+        Return a TopicQuery containing topics that contain
+        at least one sample with strength >= threshold.
+
+        Note that this is a destructive operation when threshold!=0.0
+
+        Parameters
+        ----------
+        threshold : float (optional, default = 1.0)
+            Threshold at which to include topics in result
+        """
         topic_vec = np.max(self.matrix, axis=0)
-        indices = (topic_vec>=threshold).nonzero()[0]  
-        idx_to_idx = {v:k for k,v in self.idx_to_idx}
-        indices = np.array([idx_to_idx[i] for i in indices])
+        indices = (
+            topic_vec >= self.db.soft_cluster_tree.to_int(threshold)
+        ).nonzero()[0]
         return TopicQuery(self.db, indices)
 
 class SampleQuery:
@@ -194,7 +236,7 @@ class TopicQuery:
             )
         return SampleQuery(self.db, np.array(sorted(indices)))
 
-    def info(self) -> pd.DataFrame:
+    def metadata(self) -> pd.DataFrame:
         """Return topic metadata rows for these topics."""
         return self.db._info(self.indices)
     

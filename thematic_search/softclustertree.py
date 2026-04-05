@@ -166,10 +166,10 @@ class SoftClusterTree:
             (self.n_docs, self.n_topics), dtype=np.uint8
         )
         for col_idx in range(self.n_topics):
-            layer, layer_idx = self.idx_to_loc[idx]
+            layer, layer_idx = self.idx_to_loc[col_idx]
             if layer < self.n_layers:
                 layer_matrix =  (
-                    cluster_matrices[layer].toarray()
+                    self.to_float(cluster_matrices[layer].toarray())
                     if scipy.sparse.issparse(cluster_matrices[layer])
                     else np.asarray(cluster_matrices[layer])
                 )
@@ -184,7 +184,7 @@ class SoftClusterTree:
             for j in children:
                 A[i, j] = True
         self.adjacency_closure = (floyd_warshall(
-            scipy.sparse.csr_matrix(A)
+            scipy.sparse.csr_matrix(A.T)
         )<np.inf).astype(int)  
 
 

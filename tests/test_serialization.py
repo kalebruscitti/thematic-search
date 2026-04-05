@@ -148,7 +148,7 @@ def _assert_round_trip(original: TopicDatabase, loaded: TopicDatabase):
 def _assert_query_works(db: TopicDatabase):
     """Smoke-test a basic query chain on a loaded database."""
     random_indices = np.random.default_rng().choice(len(db.document_df),size=5)
-    result = db.q.from_docs(random_indices).topics().info()
+    result = db.q.from_docs(random_indices).topics().metadata()
     assert isinstance(result, pd.DataFrame)
 
 
@@ -214,9 +214,9 @@ class TestZipBackend:
     def from_serialized_toponymy(self):
         """ We should be able to init a TopicDB from Toponymy """
         topicdb = TopicDatabase.from_file("20ng-topicdb.tm.zip")
-        q1=topicdb.q.neighbours("Recent advancements in space exploration").neighbours().theme().info()
+        q1=topicdb.q.neighbours("Recent advancements in space exploration").neighbours().theme().metadata()
         assert q1.name.values[0] == "sci.space"
-        q2=topicdb.q.from_docs([0,7,8,33,18132]).theme().info()
+        q2=topicdb.q.from_docs([0,7,8,33,18132]).theme().metadata()
         assert q2.name.values[0] == "rec.sport"
 
 # =============================================================================
