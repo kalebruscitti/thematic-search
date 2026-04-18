@@ -2,7 +2,7 @@ import numpy as np
 from typing import Union, List, Optional
 import pandas as pd
 from .softclustertree import IndexExpr
-
+import scipy.sparse
 
 class FuzzyQuery:
     """
@@ -42,9 +42,20 @@ class FuzzyQuery:
     def _indexed_colimit(self, indices):
         mask = np.isin(np.arange(self.matrix.shape[1]), indices)
         self.matrix[:, ~mask] = 0
-        A = self.db.soft_cluster_tree.adjacency_closure
-        indexed_colimit = np.max(self.matrix[:, :, None] * A[None, :, :], axis=1)
-        return indexed_colimit
+
+        # Claude tells me that CSC format makes column slicing efficient
+        A_csc = scipy.sparse.csc_matrix(
+            self.db.soft_cluster_tree.adjacency_closure
+        )
+        n_docs, n_topics = self.matrix.shape
+        result = np.zeros((n_docs, n_topics), dtype=self.matrix.dtype)
+
+        for j in range(n_topics):
+            ancestor_cols = A_csc.indices[A_csc.indptr[j]:A_csc.indptr[j + 1]]
+            if len(ancestor_cols):
+                result[:, j] = self.matrix[:, ancestor_cols].max(axis=1)
+
+        return result
 
     def topics_where(self, query: str) -> "FuzzyQuery":
         """
@@ -190,7 +201,7 @@ class SampleQuery:
 
     def to_fuzzy(self) -> "FuzzyQuery":
         """Use this SampleQuery's indices to filter a FuzzyQuery"""
-        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.toarray())
         return fq._apply_sample_mask(self.indices)
 
 
@@ -267,7 +278,7 @@ class TopicQuery:
 
     def to_fuzzy(self) -> "FuzzyQuery":
         """Use this TopicQuery's indices as a filter for a FuzzyQuery"""
-        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.toarray())
         return FuzzyQuery(self.db, fq._indexed_colimit(self.indices))
 
 
@@ -368,7 +379,7 @@ class RootQuery:
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """
-        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.toarray())
         return fq.samples_where(query)
 
     def topics_where(self, query: str) -> TopicQuery:
@@ -380,7 +391,7 @@ class RootQuery:
         query : str
             A query string following `pandas.DataFrame.query` syntax.
         """
-        fq = FuzzyQuery(self.db, self.db.cluster_matrix.todense())
+        fq = FuzzyQuery(self.db, self.db.cluster_matrix.toarray())
         return fq.topics_where(query)
 
     def index_expr(self, expr: IndexExpr, threshold: float = 1.0) -> SampleQuery:
