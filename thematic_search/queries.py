@@ -24,6 +24,7 @@ class FuzzyQuery:
     def _apply_sample_mask(self, indices):
         mask = np.isin(np.arange(self.matrix.shape[0]), indices)
         self.matrix[~mask, :] = 0
+        return self
 
     def samples_where(self, query: str) -> "FuzzyQuery":
         """
