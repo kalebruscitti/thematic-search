@@ -2,7 +2,8 @@ import numpy as np
 from typing import Union, List, Optional
 import pandas as pd
 from .softclustertree import IndexExpr
-import scipy.sparse
+from .theme import ThemeNode
+
 
 class FuzzyQuery:
     """
@@ -42,20 +43,9 @@ class FuzzyQuery:
     def _indexed_colimit(self, indices):
         mask = np.isin(np.arange(self.matrix.shape[1]), indices)
         self.matrix[:, ~mask] = 0
-
-        # Claude tells me that CSC format makes column slicing efficient
-        A_csc = scipy.sparse.csc_matrix(
-            self.db.soft_cluster_tree.adjacency_closure
-        )
-        n_docs, n_topics = self.matrix.shape
-        result = np.zeros((n_docs, n_topics), dtype=self.matrix.dtype)
-
-        for j in range(n_topics):
-            ancestor_cols = A_csc.indices[A_csc.indptr[j]:A_csc.indptr[j + 1]]
-            if len(ancestor_cols):
-                result[:, j] = self.matrix[:, ancestor_cols].max(axis=1)
-
-        return result
+        A = self.db.soft_cluster_tree.adjacency_closure
+        indexed_colimit = np.max(self.matrix[:, :, None] * A[None, :, :], axis=1)
+        return indexed_colimit
 
     def topics_where(self, query: str) -> "FuzzyQuery":
         """
@@ -159,11 +149,57 @@ class SampleQuery:
 
     def theme(self) -> "TopicQuery":
         """
-        Find the most specific topic that best covers these document indices,
-        weighted by their soft membership strengths.
+        Find the most surprising topic for these document indices relative
+        to the global corpus, using a KL-divergence-style surprise score.
         """
         topic_idx = self.db._theme(self.indices)
         return TopicQuery(self.db, [topic_idx])
+
+    def recursive_theme(
+        self,
+        z_threshold: float = 2.0,
+        entropy_threshold: float = 0.4,
+        min_disjunct_weight: float = 0.1,
+        max_disjuncts: float = np.inf,
+        max_conjunction: int = np.inf,
+    ) -> "ThemeNode":
+        """
+        Recursively find a theme formula for these document indices.
+
+        Returns a ThemeNode representing a formula of the form
+        (A AND B AND ...) OR (C AND ...) OR ..., where each branch is
+        weighted by the fraction of conditioned query mass it captures.
+
+        Call .pprint(db) on the result for a readable representation.
+
+        Parameters
+        ----------
+        z_threshold : float, optional (default=2.0)
+            Stopping sensitivity. Recursion stops when the best remaining
+            conditional surprise score falls below z_threshold / sqrt(k).
+        entropy_threshold : float, optional (default=0.4)
+            Normalised entropy threshold in [0, 1]. Below this the query is
+            considered concentrated and a split is attempted into children.
+        min_disjunct_weight : float, optional (default=0.1)
+            Minimum pi weight for a side branch to be included as a disjunct.
+        max_disjuncts : float, optional (default=np.inf)
+            Maximum disjunct branches at any single split. Set to 1 to
+            suppress all disjuncts (purely conjunctive, fastest).
+        max_conjunction : int, optional (default=10)
+            Maximum number of terms in any single conjunction chain.
+
+        Returns
+        -------
+        ThemeNode or None
+        """
+        return self.db._recursive_theme(
+            self.indices,
+            z_threshold=z_threshold,
+            entropy_threshold=entropy_threshold,
+            min_disjunct_weight=min_disjunct_weight,
+            max_disjuncts=max_disjuncts,
+            max_conjunction=max_conjunction,
+        )
 
     def metadata(self) -> pd.DataFrame:
         """Return the document metadata rows for these indices."""

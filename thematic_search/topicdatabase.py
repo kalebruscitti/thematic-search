@@ -12,6 +12,7 @@ from .serialization import (
     load_topic_database_lance,
 )
 from .queries import *
+from .theme import recursive_theme as _recursive_theme_fn, _surprise_score as _surprise_score_fn
 
 
 class TopicDatabase:
@@ -100,6 +101,14 @@ class TopicDatabase:
             topic_df.index = topic_df.index.map(label_to_idx)
             self.topic_df = topic_df
 
+        # Precompute and cache the full float strength matrix for theme scoring.
+        # Shape: (n_docs, n_topics), float64 in [0, 1].
+        self._all_strengths = (
+            self.soft_cluster_tree.cluster_matrix.toarray().astype(np.float64) / 255.0
+        )
+        # Global mean soft membership per topic — baseline frequency for surprise scoring.
+        self.global_topic_strengths = self._all_strengths.mean(axis=0)  # shape: (n_topics,)
+
     def _minimal_topic_df(self) -> pd.DataFrame:
         """Build a minimal topic metadata DataFrame from the SoftClusterTree."""
         rows = []
@@ -186,60 +195,59 @@ class TopicDatabase:
         else:
             raise ValueError("`logic` must be 'OR' or 'AND'")
 
-    def _theme(self, indices: np.ndarray, vector: np.ndarray = None) -> str:
+    def _get_descendants(self, topic_idx: int) -> set:
+        """Return the set of all descendant topic indices of a given topic."""
+        row = self.soft_cluster_tree.adjacency_closure[topic_idx]
+        return set(np.where(row)[0].tolist())
+
+    def _theme(self, indices: np.ndarray) -> int:
         """
-        Find the most specific topic that best covers a set of document indices,
-        weighted by their soft membership strengths and topic depth.
-
-        Balances two objectives:
-        - Coverage: what fraction of the query documents are inside this topic
-        - Specificity: how deep the topic is in the tree
-
-        Uses soft membership strengths to weight the coverage score,
-        so documents with higher inclusion strength contribute more.
-
-        Parameters
-        ----------
-        indices : np.ndarray
-            Document indices (typically nearest neighbours of a query vector).
-        vector : np.ndarray, optional
-            Unused, reserved for future strength-weighted aggregation.
-
-        Returns
-        -------
-        str
-            The idx of the best matching topic.
+        Find the most surprising topic for a set of document indices,
+        using a KL-divergence-style surprise score relative to global
+        topic frequencies. Surprise naturally encodes specificity: deeper
+        topics are globally rarer by inclusion consistency, so no explicit
+        depth penalty is needed.
         """
         if len(indices) == 0:
             return self.soft_cluster_tree.root_idx
 
-        tree = self.soft_cluster_tree
-        all_indices = list(tree.idx_to_loc.keys())
+        query_strengths = self._all_strengths[indices]  # (n_query, n_topics)
 
         best_idx = None
-        best_score = -1
-
-        for topic_idx in all_indices:
-            # Get soft membership strengths for all query documents
-            strengths = tree.strengths(topic_idx, indices, as_float=True)
-
-            # Weighted coverage: mean strength over query documents
-            coverage = strengths.mean()
-            if coverage == 0:
-                continue
-
-            # Layer score: prefer lower layer (more specific) topics
-            layer_score = ((tree.n_layers + 1) - tree.idx_to_loc[topic_idx][0]) / (
-                tree.n_layers + 1
+        best_score = -np.inf
+        for topic_idx in self.soft_cluster_tree.idx_to_loc:
+            score = _surprise_score_fn(
+                query_strengths[:, topic_idx],
+                self._all_strengths[:, topic_idx],
             )
-
-            score = coverage * layer_score
-
             if score > best_score:
                 best_score = score
                 best_idx = topic_idx
 
-        return best_idx if best_idx is not None else tree.root_idx
+        return best_idx if best_idx is not None else self.soft_cluster_tree.root_idx
+
+    def _recursive_theme(
+        self,
+        indices: np.ndarray,
+        z_threshold: float = 2.0,
+        entropy_threshold: float = 0.4,
+        min_disjunct_weight: float = 0.1,
+        max_disjuncts: float = np.inf,
+        max_conjunction: int = 10,
+    ):
+        """
+        Find a recursive theme formula for a set of query documents.
+        Delegates to theme.recursive_theme. See that function for full docs.
+        """
+        return _recursive_theme_fn(
+            db=self,
+            indices=indices,
+            z_threshold=z_threshold,
+            entropy_threshold=entropy_threshold,
+            min_disjunct_weight=min_disjunct_weight,
+            max_disjuncts=max_disjuncts,
+            max_conjunction=max_conjunction,
+        )
 
     @property
     def tree(self):
