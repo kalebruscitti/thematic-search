@@ -176,18 +176,19 @@ class SoftClusterTree:
         self.root_idx = roots[0]
         self.idx_to_loc[self.root_idx] = (self.n_layers, 0)
 
-        cluster_matrix = np.zeros((self.n_docs, self.n_topics), dtype=np.uint8)
+        # Build cluster_matrix as float first, then quantize to uint8
+        cluster_matrix = np.zeros((self.n_docs, self.n_topics), dtype=np.float64)
         for col_idx in range(self.n_topics):
             layer, layer_idx = self.idx_to_loc[col_idx]
             if layer < self.n_layers:
-                layer_matrix = (
-                    self.to_float(cluster_matrices[layer].toarray())
-                    if scipy.sparse.issparse(cluster_matrices[layer])
-                    else np.asarray(cluster_matrices[layer])
-                )
+                if scipy.sparse.issparse(cluster_matrices[layer]):
+                    layer_matrix = cluster_matrices[layer].toarray().astype(np.float64) / 255.0
+                else:
+                    layer_matrix = np.asarray(cluster_matrices[layer], dtype=np.float64)
                 cluster_matrix[:, col_idx] = layer_matrix[:, layer_idx]
             else:
-                cluster_matrix[:, col_idx] = 1
+                cluster_matrix[:, col_idx] = 1.0
+        # Quantize float matrix to uint8 and sparsify
         self.cluster_matrix = self._sparsify(cluster_matrix, sparsity_threshold)
         # Compute transitive closure matrix of the tree
         # This needs to be stored for quick indexed colimits

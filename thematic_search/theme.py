@@ -111,7 +111,7 @@ def _surprise_score(
     eps: float = 1e-10,
 ) -> float:
     """
-    Compute the KL-divergence-style surprise score for a topic.
+    Compute the surprise score for a topic.
 
         score = query_coverage * log(query_coverage / global_freq)
 

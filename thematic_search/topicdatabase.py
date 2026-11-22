@@ -12,7 +12,9 @@ from .serialization import (
     load_topic_database_lance,
 )
 from .queries import *
-from .theme import recursive_theme as _recursive_theme_fn, _surprise_score as _surprise_score_fn
+from .theme import _surprise_score as _surprise_score_fn
+from .topic_formula import TopicFormula
+from .robust_topic import robust_topic as _robust_topic_fn
 
 
 class TopicDatabase:
@@ -226,28 +228,30 @@ class TopicDatabase:
 
         return best_idx if best_idx is not None else self.soft_cluster_tree.root_idx
 
-    def _recursive_theme(
+    def _robust_topic(
         self,
-        indices: np.ndarray,
-        z_threshold: float = 2.0,
-        entropy_threshold: float = 0.4,
-        min_disjunct_weight: float = 0.1,
-        max_disjuncts: float = np.inf,
-        max_conjunction: int = 10,
-    ):
+        f: np.ndarray,
+        lambda_: float = 1.0,
+        candidates_per_step: int = 3,
+    ) -> TopicFormula:
         """
-        Find a recursive theme formula for a set of query documents.
-        Delegates to theme.recursive_theme. See that function for full docs.
+        Compute the robust topic for a fuzzy set of documents.
+
+        Parameters
+        ----------
+        f : np.ndarray, shape (n_docs,)
+            A fuzzy subset of the documents, values in [0, 1].
+        lambda_ : float, optional (default=1.0)
+            Strength of the complexity penalty.
+        candidates_per_step : int, optional (default=3)
+            Number of candidates to maintain in the beam search.
+
+        Returns
+        -------
+        TopicFormula
+            The robust topic formula.
         """
-        return _recursive_theme_fn(
-            db=self,
-            indices=indices,
-            z_threshold=z_threshold,
-            entropy_threshold=entropy_threshold,
-            min_disjunct_weight=min_disjunct_weight,
-            max_disjuncts=max_disjuncts,
-            max_conjunction=max_conjunction,
-        )
+        return _robust_topic_fn(self, f, lambda_=lambda_, candidates_per_step=candidates_per_step)
 
     @property
     def tree(self):

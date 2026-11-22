@@ -2,7 +2,14 @@ import numpy as np
 from typing import Union, List, Optional
 import pandas as pd
 from .softclustertree import IndexExpr
-from .theme import ThemeNode
+from .topic_formula import TopicFormula
+
+
+def _topic_name_map(db) -> Optional[dict]:
+    """Build a vertex index -> display name mapping from db.topic_df."""
+    if db.topic_df is None or "name" not in db.topic_df.columns:
+        return None
+    return dict(zip(db.topic_df.index, db.topic_df["name"]))
 
 
 class FuzzyQuery:
@@ -151,55 +158,40 @@ class SampleQuery:
         """
         Find the most surprising topic for these document indices relative
         to the global corpus, using a KL-divergence-style surprise score.
+        
+        Returns a TopicQuery carrying a TopicFormula for the best topic.
         """
         topic_idx = self.db._theme(self.indices)
-        return TopicQuery(self.db, [topic_idx])
+        formula = TopicFormula.from_vertex(topic_idx, topic_names=_topic_name_map(self.db))
+        return TopicQuery(self.db, formula)
 
-    def recursive_theme(
-        self,
-        z_threshold: float = 2.0,
-        entropy_threshold: float = 0.4,
-        min_disjunct_weight: float = 0.1,
-        max_disjuncts: float = np.inf,
-        max_conjunction: int = np.inf,
-    ) -> "ThemeNode":
+    def topic(self, lambda_: float = 1.0, candidates_per_step: int = 3) -> "TopicQuery":
         """
-        Recursively find a theme formula for these document indices.
+        Find the robust topic for these document indices.
 
-        Returns a ThemeNode representing a formula of the form
-        (A AND B AND ...) OR (C AND ...) OR ..., where each branch is
-        weighted by the fraction of conditioned query mass it captures.
-
-        Call .pprint(db) on the result for a readable representation.
+        Uses the greedy RobustTopic algorithm from the theory, which balances
+        coverage (surprise) against formula complexity (rank). Unlike theme(),
+        which returns a single vertex, this can return a compound formula in 𝒢_T.
 
         Parameters
         ----------
-        z_threshold : float, optional (default=2.0)
-            Stopping sensitivity. Recursion stops when the best remaining
-            conditional surprise score falls below z_threshold / sqrt(k).
-        entropy_threshold : float, optional (default=0.4)
-            Normalised entropy threshold in [0, 1]. Below this the query is
-            considered concentrated and a split is attempted into children.
-        min_disjunct_weight : float, optional (default=0.1)
-            Minimum pi weight for a side branch to be included as a disjunct.
-        max_disjuncts : float, optional (default=np.inf)
-            Maximum disjunct branches at any single split. Set to 1 to
-            suppress all disjuncts (purely conjunctive, fastest).
-        max_conjunction : int, optional (default=10)
-            Maximum number of terms in any single conjunction chain.
+        lambda_ : float, optional (default=1.0)
+            Strength of the complexity penalty. Higher values prefer simpler
+            (lower-rank) formulas.
+        candidates_per_step : int, optional (default=3)
+            Number of candidates to maintain in the beam search. Higher values
+            explore more paths but increase computation time.
 
         Returns
         -------
-        ThemeNode or None
+        TopicQuery
+            A TopicQuery carrying the robust topic formula.
         """
-        return self.db._recursive_theme(
-            self.indices,
-            z_threshold=z_threshold,
-            entropy_threshold=entropy_threshold,
-            min_disjunct_weight=min_disjunct_weight,
-            max_disjuncts=max_disjuncts,
-            max_conjunction=max_conjunction,
-        )
+        # Build a characteristic function for these indices
+        f = np.zeros(self.db._all_strengths.shape[0])
+        f[self.indices] = 1.0
+        formula = self.db._robust_topic(f, lambda_=lambda_, candidates_per_step=candidates_per_step)
+        return TopicQuery(self.db, formula)
 
     def metadata(self) -> pd.DataFrame:
         """Return the document metadata rows for these indices."""
@@ -243,67 +235,125 @@ class SampleQuery:
 
 class TopicQuery:
     """
-    A query object carrying a set of topic indices.
-    Supports navigation within the topic tree or retrieval of topic data.
+    A query object carrying a TopicFormula (a geometric formula in 𝒢_T).
+    Supports evaluation, navigation within the topic tree, and retrieval of topic data.
 
     Typical usage:
-        topicdb.q.search("jazz music").theme().parents().info()
+        topicdb.q.search("jazz music").theme().parents().metadata()
     """
 
-    def __init__(self, db, indices: list):
+    def __init__(self, db, formula: TopicFormula | list):
+        """
+        Parameters
+        ----------
+        db : TopicDatabase
+        formula : TopicFormula or list
+            A TopicFormula, or a list of vertex indices (backward compatibility).
+        """
         self.db = db
-        self.indices = indices
+        topic_names = _topic_name_map(db)
+        if isinstance(formula, TopicFormula):
+            self.formula = formula
+            # Attach topic_names if the formula doesn't have them yet
+            if self.formula.topic_names is None and topic_names:
+                self.formula.topic_names = topic_names
+        else:
+            # Backward compatibility: treat list of indices as a disjunction of atoms
+            self.formula = TopicFormula([{idx} for idx in formula], topic_names=topic_names)
 
     def __repr__(self):
-        return f"TopicQuery({len(self.indices)} topics)"
+        return f"TopicQuery({self.formula!r})"
 
-    def unwrap(self) -> list:
-        return self.indices
+    @property
+    def indices(self) -> list:
+        """All vertex indices appearing in the formula (backward compatibility)."""
+        return sorted(self.formula.vertices())
+
+    def unwrap(self) -> TopicFormula:
+        return self.formula
+
+    def evaluate(self) -> np.ndarray:
+        """
+        Compute Clust(formula) — the inclusion strength vector for this formula.
+
+        Returns
+        -------
+        np.ndarray
+            Dense uint8 inclusion strength vector, shape (n_docs,).
+        """
+        expr = self.formula.to_index_expr()
+        return self.db.soft_cluster_tree._evaluate(expr)
 
     def parents(self) -> "TopicQuery":
-        """Return the parent topics of these topics."""
-        result = set()
-        for idx in self.indices:
-            result.update(self.db.soft_cluster_tree.parents(idx))
-        return TopicQuery(self.db, list(result))
+        """
+        Apply the Parent functor to this formula.
+
+        For each vertex v in the formula, replace it with Parent(v).
+        Since Parent is a lattice homomorphism, this commutes with
+        the ∧ and ∨ structure of the formula.
+        """
+        new_terms = []
+        tree = self.db.soft_cluster_tree
+        for term in self.formula.terms:
+            new_term = set()
+            for v in term:
+                parents_v = tree.parents(v)
+                if parents_v:
+                    # A vertex may have multiple parents in a DAG;
+                    # take their disjunction within this conjunction slot
+                    new_term.update(parents_v)
+                else:
+                    # Root maps to itself under Parent
+                    new_term.add(v)
+            if new_term:
+                new_terms.append(new_term)
+        new_formula = TopicFormula(new_terms, topic_names=self.formula.topic_names)
+        from .topic_formula import simplify_formula
+        new_formula = simplify_formula(new_formula, tree.adjacency_closure)
+        return TopicQuery(self.db, new_formula)
 
     def children(self) -> "TopicQuery":
-        """Return the child topics of these topics."""
-        result = set()
-        for idx in self.indices:
-            result.update(self.db.soft_cluster_tree.children(idx))
-        return TopicQuery(self.db, list(result))
+        """
+        Return children of all vertices in the formula, as a disjunction formula.
+        """
+        tree = self.db.soft_cluster_tree
+        child_indices = set()
+        for idx in self.formula.vertices():
+            child_indices.update(tree.children(idx))
+        return TopicQuery(self.db, list(child_indices))
 
     def least_upper_bound(self) -> "TopicQuery":
-        """Return the least upper bound (lowest common ancestor) of these topics."""
-        return TopicQuery(self.db, self.db.soft_cluster_tree.join(self.indices))
+        """Return the least upper bound (lowest common ancestor) of the formula's vertices."""
+        vertices = list(self.formula.vertices())
+        if not vertices:
+            return TopicQuery(self.db, [])
+        lub = self.db.soft_cluster_tree.join(vertices)
+        return TopicQuery(self.db, lub)
 
     def samples(
         self,
         threshold: float = 1.0,
     ) -> "SampleQuery":
         """
-        Return document indices inside these topics, combined with OR logic.
+        Return document indices where Clust(formula) >= threshold.
 
         Parameters
         ----------
         threshold : float, optional (default=1.0)
             Minimum inclusion strength in [0, 1].
         """
-        indices = set()
-        for idx in self.indices:
-            indices.update(
-                self.db.soft_cluster_tree.inside(idx, threshold=threshold).tolist()
-            )
-        return SampleQuery(self.db, np.array(sorted(indices)))
+        strengths = self.evaluate()
+        threshold_int = self.db.soft_cluster_tree.to_int(threshold)
+        indices = np.where(strengths >= threshold_int)[0]
+        return SampleQuery(self.db, indices)
 
     def metadata(self) -> pd.DataFrame:
-        """Return topic metadata rows for these topics."""
+        """Return topic metadata rows for all vertices in the formula."""
         return self.db._info(self.indices)
 
-    def where(self, query: str) -> "SampleQuery":
+    def where(self, query: str) -> "TopicQuery":
         """
-        Filter topics by metadata column values.
+        Filter formula vertices by metadata column values.
 
         Example
         -------
@@ -313,7 +363,7 @@ class TopicQuery:
         return TopicQuery(self.db, topics)
 
     def to_fuzzy(self) -> "FuzzyQuery":
-        """Use this TopicQuery's indices as a filter for a FuzzyQuery"""
+        """Use this formula's vertices as a filter for a FuzzyQuery."""
         fq = FuzzyQuery(self.db, self.db.cluster_matrix.toarray())
         return FuzzyQuery(self.db, fq._indexed_colimit(self.indices))
 

@@ -7,6 +7,8 @@ from .softclustertree import (
     IndexOr,
     IndexNot,
 )
+from .topic_formula import TopicFormula
+from .robust_topic import robust_topic
 from .queries import SampleQuery, TopicQuery, RootQuery, FuzzyQuery
 import thematic_search.utilities as utils
 
@@ -18,11 +20,17 @@ __all__ = [
     "TopicQuery",
     "RootQuery",
     "FuzzyQuery",
+    # Formula representation
+    "TopicFormula",
+    # Core operations
+    "robust_topic",
+    # Tree structure
     "SoftClusterTree",
     "IndexExpr",
     "Cluster",
     "IndexAnd",
     "IndexOr",
     "IndexNot",
+    # Utilities
     "utils",
 ]
